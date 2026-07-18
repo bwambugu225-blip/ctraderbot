@@ -1286,8 +1286,19 @@ function handleMessage(data) {
         const accounts = payload.ctidTraderAccount || [];
         if (accounts.length > 0) {
           const acc = accounts[0];
-          addLog(`Found account #${acc.ctidTraderAccountId} (${acc.accountType || 'unknown'})`, 'green');
+          const type = acc.accountType || acc.accountTypeName || 'unknown';
+          const isDemo = acc.isDemo || (type && type.toLowerCase().includes('demo'));
+          const currentEnv = document.getElementById('connEnv').value;
+          const needEnv = isDemo ? 'demo' : 'live';
+          addLog(`Found account #${acc.ctidTraderAccountId} (${type}, ${needEnv})`, 'green');
           document.getElementById('connAccountId').value = acc.ctidTraderAccountId;
+          document.getElementById('connEnv').value = needEnv;
+          if (needEnv !== currentEnv) {
+            addLog(`Environment mismatch (${currentEnv} vs ${needEnv}), reconnecting...`, 'yellow');
+            disconnect();
+            setTimeout(() => toggleConnection(), 500);
+            return;
+          }
         }
         authenticateAccount();
         break;
