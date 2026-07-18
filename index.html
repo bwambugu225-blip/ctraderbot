@@ -1238,16 +1238,19 @@ function authenticateApp() {
 
 function authenticateAccount() {
   const creds = getCredentials();
-  const msg = {
-    clientMsgId: nextMsgId(),
-    payloadType: PAYLOAD.ACCOUNT_AUTH_REQ,
-    payload: {
-      ctidTraderAccountId: parseInt(creds.accountId) || 0,
-      accessToken: creds.accessToken,
-    },
+  const accountId = creds.accountId;
+  if (!accountId || isNaN(parseInt(accountId, 10))) {
+    addLog('Invalid account ID: "' + accountId + '" — try re-authorizing', 'red');
+    return;
+  }
+  // int64 fields must be sent as strings in protobuf JSON
+  const payload = {
+    ctidTraderAccountId: accountId,
+    accessToken: creds.accessToken,
   };
+  addLog('Auth account #' + accountId, 'blue');
+  const msg = { clientMsgId: nextMsgId(), payloadType: PAYLOAD.ACCOUNT_AUTH_REQ, payload: payload };
   sendWs(msg);
-  addLog('Sent account auth request', 'blue');
 }
 
 function getAccountsByToken() {
