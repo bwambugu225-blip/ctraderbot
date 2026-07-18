@@ -1238,12 +1238,11 @@ function authenticateApp() {
 
 function authenticateAccount() {
   const creds = getCredentials();
-  const accountId = creds.accountId;
-  if (!accountId || isNaN(parseInt(accountId, 10))) {
-    addLog('Invalid account ID: "' + accountId + '" — try re-authorizing', 'red');
+  const accountId = parseInt(creds.accountId, 10);
+  if (!accountId || isNaN(accountId)) {
+    addLog('Invalid account ID: "' + creds.accountId + '" — try re-authorizing', 'red');
     return;
   }
-  // int64 fields must be sent as strings in protobuf JSON
   const payload = {
     ctidTraderAccountId: accountId,
     accessToken: creds.accessToken,
