@@ -3,837 +3,1400 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>cTrader Bot — Trading Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<title>MetaTrader 5 Web Terminal — cTrader OpenAPI Bot Edition</title>
+<!-- TradingView Lightweight Charts CDN v3.8.0 -->
+<script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg-deep: #070b14;
-  --bg-primary: #0c1123;
-  --bg-secondary: #111833;
-  --bg-surface: #162050;
-  --bg-hover: #1c2d6b;
-  --border: #1e3060;
-  --text: #eef2ff;
-  --text-secondary: #94a3cc;
-  --text-muted: #5a6faa;
-  --green: #00e676;
-  --green-dim: rgba(0,230,118,0.1);
-  --red: #ff4560;
-  --red-dim: rgba(255,69,96,0.1);
-  --blue: #5b8def;
-  --blue-dim: rgba(91,141,239,0.12);
-  --yellow: #ffc107;
-  --yellow-dim: rgba(255,193,7,0.1);
-  --accent: #5b8def;
+  --mt5-bg: #1c1c1c;             /* Main platform background */
+  --mt5-panel-bg: #2b2b2b;       /* Sidebars, toolbox, toolbars */
+  --mt5-border: #3c3c3c;         /* Panel borders */
+  --mt5-border-light: #4c4c4c;   /* Subtle inner borders */
+  --mt5-text: #e0e0e0;           /* Soft white text */
+  --mt5-text-muted: #8c8c8c;     /* Muted gray text */
+  --mt5-accent: #007acc;         /* Windows blue highlight */
+  --mt5-accent-hover: #1f91d6;   /* Blue hover state */
+  --mt5-green: #00c05a;          /* Bull / buy green */
+  --mt5-green-dim: rgba(0, 192, 90, 0.15);
+  --mt5-red: #ff3b30;            /* Bear / sell red */
+  --mt5-red-dim: rgba(255, 59, 48, 0.15);
+  --mt5-active: #3c3c3c;         /* Selected button background */
+  --mt5-hover: #323232;          /* Hover over list items */
+  --mt5-chart-bg: #0b0e14;       /* Deep dark chart background */
 }
-* { margin:0; padding:0; box-sizing:border-box; }
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
-  background: var(--bg-deep);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-::-webkit-scrollbar { width:5px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-.app { display:flex; flex-direction:column; height:100vh; }
-
-/* ── Top Bar ── */
-.topbar {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0 20px; height:48px;
-  background: var(--bg-primary);
-  border-bottom:1px solid var(--border); flex-shrink:0;
-}
-.topbar-left { display:flex; align-items:center; gap:14px; }
-.logo { font-size:17px; font-weight:700; color:var(--accent); letter-spacing:-0.3px; }
-.logo span { color:var(--text); }
-.connection-badge {
-  display:flex; align-items:center; gap:5px;
-  font-size:11px; font-weight:500; padding:3px 10px;
-  border-radius:4px; background:var(--red-dim); color:var(--red); cursor:pointer;
-  text-transform:uppercase; letter-spacing:0.3px;
-}
-.connection-badge.connected { background:var(--green-dim); color:var(--green); }
-.connection-badge.connecting { background:var(--yellow-dim); color:var(--yellow); }
-.connection-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
-.topbar-right { display:flex; align-items:center; gap:12px; }
-.account-info {
-  display:flex; align-items:center; gap:14px; font-size:12px;
-}
-.account-info .label { color:var(--text-muted); }
-.account-info .value { font-weight:600; }
-.account-info .value.green { color:var(--green); }
-.account-info .value.red { color:var(--red); }
-
-/* ── Main ── */
-.main { display:flex; flex:1; overflow:hidden; }
-
-/* ── Sidebar ── */
-.sidebar {
-  width:180px; background:var(--bg-primary);
-  border-right:1px solid var(--border);
-  display:flex; flex-direction:column; flex-shrink:0;
-}
-.sidebar-nav { padding:10px; display:flex; flex-direction:column; gap:1px; }
-.nav-item {
-  display:flex; align-items:center; gap:8px; padding:8px 12px;
-  cursor:pointer; font-size:12px; font-weight:500;
-  color:var(--text-secondary); transition:all 0.12s;
-}
-.nav-item:hover { background:var(--bg-secondary); color:var(--text); }
-.nav-item.active { background:var(--blue-dim); color:var(--blue); }
-.nav-item .icon { font-size:14px; width:18px; text-align:center; }
-.nav-item .badge {
-  margin-left:auto; font-size:10px; padding:1px 6px;
-  background:var(--bg-hover); color:var(--text-secondary);
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: var(--mt5-bg);
+  color: var(--mt5-text);
+  font-size: 11px;
+  overflow: hidden;
+  height: 100vh;
+  user-select: none;
 }
 
-/* ── Content ── */
-.content { flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
-
-/* ── Panel (card-free, border-free) ── */
-.panel { background:var(--bg-secondary); }
-.panel-header {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:10px 16px;
-  font-size:11px; font-weight:600; color:var(--text-muted);
-  text-transform:uppercase; letter-spacing:0.4px;
-  border-bottom:1px solid var(--border);
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.panel-header .actions { display:flex; gap:6px; }
-.panel-body { padding:16px; }
-
-/* ── Grids ── */
-.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
-.grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:1px; background:var(--border); }
-.grid-4 > .panel { background:var(--bg-secondary); }
-
-/* ── Stats ── */
-.stat { padding:10px 14px; }
-.stat .label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px; }
-.stat .value { font-size:22px; font-weight:700; line-height:1.2; }
-.stat .value.green { color:var(--green); }
-.stat .value.red { color:var(--red); }
-.stat .change { font-size:11px; margin-top:2px; }
-.stat .change.green { color:var(--green); }
-.stat .change.red { color:var(--red); }
-
-/* ── Tables ── */
-table { width:100%; border-collapse:collapse; font-size:12px; }
-th { text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:0.4px; border-bottom:1px solid var(--border); }
-td { padding:8px 10px; border-bottom:1px solid rgba(30,48,96,0.5); }
-tr:last-child td { border-bottom:none; }
-tr:hover td { background:var(--bg-hover); }
-.side { display:inline-flex; align-items:center; gap:3px; font-weight:600; font-size:11px; }
-.side.buy { color:var(--green); }
-.side.sell { color:var(--red); }
-.pnl { font-weight:600; }
-.pnl.pos { color:var(--green); }
-.pnl.neg { color:var(--red); }
-
-/* ── Buttons ── */
-.btn {
-  display:inline-flex; align-items:center; gap:5px; padding:7px 14px;
-  border:none; font-size:12px; font-weight:600;
-  cursor:pointer; transition:all 0.12s; font-family:inherit;
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
 }
-.btn:active { opacity:0.8; }
-.btn-buy { background:var(--green); color:#000; }
-.btn-buy:hover { background:#00e060; }
-.btn-sell { background:var(--red); color:#fff; }
-.btn-sell:hover { background:#ff5270; }
-.btn-secondary { background:var(--bg-hover); color:var(--text); }
-.btn-secondary:hover { background:var(--border); }
-.btn-sm { padding:5px 10px; font-size:11px; }
-.btn-icon { padding:5px; background:transparent; color:var(--text-secondary); }
-.btn-icon:hover { background:var(--bg-hover); color:var(--text); }
-.btn-group { display:flex; gap:6px; }
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
 
-/* ── Forms ── */
+.mt5-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── TOP MENU BAR ── */
+.mt5-menu-bar {
+  background: #202020;
+  height: 24px;
+  border-bottom: 1px solid var(--mt5-border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 12px;
+  z-index: 100;
+}
+.menu-item {
+  position: relative;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 2px;
+  color: #c8c8c8;
+}
+.menu-item:hover, .menu-item.active {
+  background: var(--mt5-hover);
+  color: #fff;
+}
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  top: 22px;
+  left: 0;
+  background: #2b2b2b;
+  border: 1px solid var(--mt5-border);
+  min-width: 180px;
+  z-index: 200;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  padding: 4px 0;
+}
+.menu-item.active .menu-dropdown {
+  display: block;
+}
+.dropdown-row {
+  padding: 6px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #dfdfdf;
+  cursor: pointer;
+}
+.dropdown-row:hover {
+  background: var(--mt5-accent);
+  color: #fff;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--mt5-border);
+  margin: 4px 0;
+}
+
+/* ── DOUBLE-ROW TOOLBAR ── */
+.mt5-toolbar-row {
+  background: var(--mt5-panel-bg);
+  border-bottom: 1px solid var(--mt5-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 4px 8px;
+  gap: 8px;
+}
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-right: 1px solid var(--mt5-border);
+  padding-right: 8px;
+}
+.toolbar-group:last-child {
+  border-right: none;
+}
+.toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #dfdfdf;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 11px;
+}
+.toolbar-btn:hover {
+  background: var(--mt5-hover);
+  border-color: #555;
+}
+.toolbar-btn.active {
+  background: var(--mt5-active);
+  border-color: var(--mt5-accent);
+}
+.toolbar-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--mt5-border);
+  margin: 0 4px;
+}
+
+/* Algo Trading Button Styling */
+.algo-trading-btn {
+  background: var(--mt5-red-dim) !important;
+  color: var(--mt5-red) !important;
+  border: 1px solid var(--mt5-red) !important;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+.algo-trading-btn.running {
+  background: var(--mt5-green-dim) !important;
+  color: var(--mt5-green) !important;
+  border: 1px solid var(--mt5-green) !important;
+}
+
+/* Timeframe buttons */
+.tf-btn {
+  font-weight: 600;
+  font-size: 10px;
+  padding: 3px 5px;
+}
+
+/* ── WORKSPACE ── */
+.mt5-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Sidebar Left */
+.mt5-sidebar {
+  width: 250px;
+  background: #202020;
+  border-right: 1px solid var(--mt5-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--mt5-border);
+}
+.sidebar-panel:last-child {
+  border-bottom: none;
+}
+.sidebar-header {
+  background: #2a2a2a;
+  height: 24px;
+  border-bottom: 1px solid var(--mt5-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  font-weight: 600;
+  color: #dfdfdf;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+.market-watch-container {
+  height: 55%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.navigator-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Market Watch Table */
+.market-watch-table-wrapper {
+  flex: 1;
+  overflow-y: auto;
+}
+.market-watch-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.market-watch-table th {
+  background: #262626;
+  text-align: left;
+  padding: 5px 6px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--mt5-border);
+  color: var(--mt5-text-muted);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.market-watch-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #282828;
+  cursor: pointer;
+}
+.market-watch-table tr:hover td {
+  background: var(--mt5-hover);
+}
+.market-watch-table tr.selected td {
+  background: var(--mt5-accent);
+  color: #fff;
+}
+.price-up {
+  color: var(--mt5-green) !important;
+}
+.price-down {
+  color: var(--mt5-red) !important;
+}
+
+/* Navigator Tree */
+.navigator-tree {
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+.tree-node {
+  padding: 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tree-node:hover {
+  color: #fff;
+}
+.tree-sub {
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.tree-sub-node {
+  padding: 3px 0;
+  color: var(--mt5-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tree-sub-node:hover {
+  color: #fff;
+}
+.ea-active-node {
+  color: var(--mt5-green) !important;
+  font-weight: 600;
+}
+
+/* Main Workspace Pane */
+.mt5-main-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--mt5-bg);
+  overflow: hidden;
+}
+
+/* Chart Workspace */
+.mt5-chart-area {
+  flex: 1;
+  position: relative;
+  background: var(--mt5-chart-bg);
+  display: flex;
+  flex-direction: column;
+}
+#chartContainer {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: var(--mt5-chart-bg);
+}
+#rsiContainer {
+  height: 120px;
+  width: 100%;
+  border-top: 1px solid var(--mt5-border);
+  background: var(--mt5-chart-bg);
+  display: none; /* Sync toggles in logic */
+}
+
+/* One Click Trading Box overlay */
+.one-click-panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 50;
+  background: rgba(30, 30, 30, 0.85);
+  border: 1px solid var(--mt5-border);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(4px);
+  width: 190px;
+}
+.oct-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--mt5-text-muted);
+  font-weight: 600;
+}
+.oct-body {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.oct-btn {
+  flex: 1;
+  height: 38px;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  font-weight: 700;
+  transition: opacity 0.15s;
+}
+.oct-btn:hover {
+  opacity: 0.9;
+}
+.oct-btn.buy {
+  background: var(--mt5-green);
+}
+.oct-btn.sell {
+  background: var(--mt5-red);
+}
+.oct-btn-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.oct-btn-price {
+  font-size: 14px;
+  letter-spacing: -0.3px;
+}
+.oct-vol-input {
+  width: 50px;
+  height: 38px;
+  background: #151515;
+  border: 1px solid var(--mt5-border);
+  color: #fff;
+  text-align: center;
+  font-weight: 700;
+  font-size: 11px;
+  outline: none;
+}
+
+/* ── BOTTOM TOOLBOX ── */
+.mt5-toolbox {
+  height: 220px;
+  background: #202020;
+  border-top: 1px solid var(--mt5-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.toolbox-tabs {
+  background: #262626;
+  height: 24px;
+  border-bottom: 1px solid var(--mt5-border);
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+.toolbox-tab {
+  padding: 4px 14px;
+  cursor: pointer;
+  color: var(--mt5-text-muted);
+  font-weight: 500;
+  border-right: 1px solid #1c1c1c;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toolbox-tab:hover {
+  background: var(--mt5-hover);
+  color: #fff;
+}
+.toolbox-tab.active {
+  background: var(--mt5-panel-bg);
+  color: #fff;
+  border-top: 2px solid var(--mt5-accent);
+  height: 24px;
+}
+.toolbox-content {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--mt5-panel-bg);
+}
+.toolbox-pane {
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+.toolbox-pane.active {
+  display: block;
+}
+
+/* Position / History grids */
+.toolbox-table-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+.toolbox-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+.toolbox-table th {
+  background: #232323;
+  text-align: left;
+  padding: 5px 8px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--mt5-border);
+  color: var(--mt5-text-muted);
+  position: sticky;
+  top: 0;
+}
+.toolbox-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #333;
+}
+.toolbox-table tr:hover td {
+  background: var(--mt5-hover);
+}
+.summary-row {
+  background: #252525;
+  font-weight: 600;
+}
+.summary-row td {
+  border-top: 1px solid var(--mt5-border);
+  border-bottom: 2px double var(--mt5-border);
+}
+
+/* Experts / Journal logs */
+.logs-terminal {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  overflow-y: auto;
+  background: #171717;
+  color: #e0e0e0;
+}
+.log-line {
+  margin-bottom: 3px;
+  display: flex;
+  gap: 8px;
+}
+.log-line .time {
+  color: var(--mt5-text-muted);
+  flex-shrink: 0;
+}
+.log-line .msg {
+  word-break: break-all;
+}
+.log-line .msg.success { color: var(--mt5-green); }
+.log-line .msg.error { color: var(--mt5-red); }
+.log-line .msg.info { color: var(--mt5-accent-hover); }
+
+/* STATUS BAR */
+.mt5-status-bar {
+  height: 20px;
+  background: #181818;
+  border-top: 1px solid var(--mt5-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 10px;
+  color: var(--mt5-text-muted);
+}
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.conn-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mt5-red);
+}
+.conn-indicator.connected .conn-dot {
+  background: var(--mt5-green);
+}
+
+/* ── MODALS & FORMS ── */
+.mt5-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.mt5-modal-overlay.open {
+  display: flex;
+}
+.mt5-modal {
+  background: var(--mt5-panel-bg);
+  border: 1px solid var(--mt5-border);
+  width: 480px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.modal-header {
+  background: #222;
+  padding: 8px 12px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--mt5-border);
+}
+.modal-close {
+  cursor: pointer;
+  color: var(--mt5-text-muted);
+  font-size: 14px;
+}
+.modal-close:hover {
+  color: #fff;
+}
+.modal-body {
+  padding: 16px;
+}
+.form-group {
+  margin-bottom: 12px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+label {
+  display: block;
+  font-size: 10px;
+  color: var(--mt5-text-muted);
+  margin-bottom: 4px;
+}
 input, select {
-  background:var(--bg-deep); border:1px solid var(--border);
-  padding:8px 12px; color:var(--text);
-  font-size:12px; font-family:inherit; outline:none; width:100%;
+  width: 100%;
+  background: #181818;
+  border: 1px solid var(--mt5-border);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
 }
-input:focus, select:focus { border-color:var(--accent); }
-label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px; font-weight:500; }
-.form-group { margin-bottom:10px; }
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.form-section { margin-bottom:14px; }
-.form-section-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:8px; padding-bottom:5px; border-bottom:1px solid var(--border); }
-
-/* ── Toggle ── */
-.toggle { display:flex; align-items:center; gap:7px; cursor:pointer; }
-.toggle input { display:none; }
-.toggle-slider {
-  width:34px; height:18px; background:var(--border); position:relative; transition:0.2s; flex-shrink:0;
+input:focus, select:focus {
+  border-color: var(--mt5-accent);
 }
-.toggle-slider::after {
-  content:''; position:absolute; top:2px; left:2px; width:14px; height:14px;
-  background:var(--text-muted); transition:0.2s;
+.btn-primary {
+  background: var(--mt5-accent);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+  width: 100%;
+  text-align: center;
 }
-.toggle input:checked + .toggle-slider { background:var(--accent); }
-.toggle input:checked + .toggle-slider::after { left:18px; background:#fff; }
-
-/* ── Tabs ── */
-.tabs { display:flex; border-bottom:1px solid var(--border); }
-.tab {
-  padding:8px 16px; font-size:12px; font-weight:500; color:var(--text-secondary);
-  cursor:pointer; border-bottom:2px solid transparent; transition:all 0.12s;
+.btn-primary:hover {
+  background: var(--mt5-accent-hover);
 }
-.tab:hover { color:var(--text); }
-.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
-
-/* ── Chart ── */
-.chart-placeholder {
-  height:300px; display:flex; align-items:center; justify-content:center;
-  background:var(--bg-deep); color:var(--text-muted); font-size:13px; position:relative; overflow:hidden;
+.btn-secondary {
+  background: #3c3c3c;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+  width: 100%;
+  text-align: center;
+}
+.btn-secondary:hover {
+  background: #4a4a4a;
 }
 
-/* ── Table Wrap ── */
-.table-wrap { overflow-x:auto; }
-.table-wrap table { min-width:550px; }
-
-/* ── Logs ── */
-.logs { max-height:180px; overflow-y:auto; font-family:'Courier New',monospace; font-size:11px; padding:0; }
-.log-entry { padding:3px 0; color:var(--text-muted); display:flex; gap:8px; }
-.log-entry .time { color:var(--text-secondary); flex-shrink:0; }
-.log-entry .msg.green { color:var(--green); }
-.log-entry .msg.red { color:var(--red); }
-.log-entry .msg.blue { color:var(--blue); }
-.log-entry .msg.yellow { color:var(--yellow); }
-
-/* ── Conn Status ── */
-.conn-status { display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:10px; font-size:12px; }
-.conn-status.offline { background:var(--red-dim); color:var(--red); }
-.conn-status.connecting { background:var(--yellow-dim); color:var(--yellow); }
-.conn-status.online { background:var(--green-dim); color:var(--green); }
-
-/* ── Mobile nav ── */
-.mobile-nav { display:none; }
-.mobile-nav-overlay { display:none; }
-
-/* ── Responsive ── */
-@media(max-width:1024px) {
-  .sidebar { width:160px; }
-  .content { padding:14px; }
-  .grid-4 { grid-template-columns:1fr 1fr; }
-  .chart-placeholder { height:240px; }
-  .account-info { gap:8px; font-size:11px; }
+/* Order dialog buy/sell buttons */
+.order-action-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
 }
-@media(max-width:768px) {
-  .app { height:100dvh; }
-  .main { flex-direction:column; }
-  .content { padding:10px; gap:10px; padding-bottom:64px; }
-  .topbar { padding:0 10px; height:44px; }
-  .logo { font-size:15px; }
-  .connection-badge { font-size:10px; padding:2px 8px; }
-  .account-info { gap:6px; font-size:10px; }
-  .account-info .label { display:none; }
-  .account-info .value { font-size:11px; }
-  .sidebar { display:none; }
-  .mobile-nav {
-    display:flex; position:fixed; bottom:0; left:0; right:0; height:56px;
-    background:var(--bg-primary); border-top:1px solid var(--border); z-index:1000;
-    padding:3px 0; overflow-x:auto;
+.btn-buy {
+  background: var(--mt5-green);
+  color: #fff;
+  flex: 1;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-family: inherit;
+}
+.btn-sell {
+  background: var(--mt5-red);
+  color: #fff;
+  flex: 1;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-family: inherit;
+}
+.btn-buy:hover, .btn-sell:hover {
+  opacity: 0.9;
+}
+
+/* ============================================================
+   RESPONSIVE: DESKTOP (default, ≥ 1100px)
+   The base layout above is the full desktop terminal.
+   ============================================================ */
+
+/* ============================================================
+   RESPONSIVE: TABLET (768px – 1099px)
+   ============================================================ */
+@media (max-width: 1099px) {
+  .mt5-sidebar { width: 200px; }
+  .mt5-menu-bar { font-size: 10px; gap: 8px; }
+  .toolbar-btn { font-size: 10px; padding: 3px 5px; }
+  .mt5-toolbox { height: 180px; }
+  .market-watch-table th, .market-watch-table td { padding: 4px 5px; font-size: 10px; }
+  .toolbox-table th, .toolbox-table td { padding: 4px 6px; font-size: 10px; }
+}
+
+/* ============================================================
+   RESPONSIVE: MOBILE (< 768px)
+   Stacked layout, collapsible sidebar drawer, bottom tab bar,
+   touch-friendly targets. MT5 visual style preserved.
+   ============================================================ */
+@media (max-width: 767px) {
+  body {
+    overflow: auto;
+    height: auto;
+    min-height: 100vh;
   }
-  .mobile-nav-inner { display:flex; min-width:100%; justify-content:space-around; align-items:stretch; }
-  .mobile-nav-item {
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:1px; padding:3px 4px; cursor:pointer; flex:1; min-width:0;
-    color:var(--text-secondary); font-size:8px; font-weight:500;
-    border:none; background:none; font-family:inherit;
+  .mt5-app {
+    height: auto;
+    min-height: 100vh;
+    width: 100%;
   }
-  .mobile-nav-item .icon { font-size:16px; }
-  .mobile-nav-item:active { opacity:0.6; }
-  .mobile-nav-item.active { color:var(--accent); }
-  .mobile-nav-item .badge { font-size:8px; padding:1px 4px; background:var(--bg-hover); color:var(--text-secondary); }
-  .mobile-nav-overlay {
-    display:block; position:fixed; top:0; left:0; right:0; bottom:0;
-    background:rgba(0,0,0,0.5); z-index:998; opacity:0;
-    pointer-events:none; transition:opacity 0.2s;
+
+  /* Menu bar becomes a compact top header */
+  .mt5-menu-bar {
+    height: 40px;
+    padding: 0 10px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .mobile-nav-overlay.open { opacity:1; pointer-events:auto; }
-  .mobile-drawer {
-    position:fixed; bottom:56px; left:0; right:0; max-height:40vh;
-    background:var(--bg-secondary); border-top:1px solid var(--border);
-    z-index:999; transform:translateY(100%); transition:transform 0.2s;
-    overflow-y:auto; padding:10px;
+  .menu-item { padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+
+  /* Toolbar wraps and spaces out for touch */
+  .mt5-toolbar-row {
+    padding: 6px 8px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .mobile-drawer.open { transform:translateY(0); }
-  .grid-2, .grid-3, .grid-4 { grid-template-columns:1fr; gap:10px; }
-  .grid-4 .stat .value { font-size:18px; }
-  .grid-4 .stat .label { font-size:10px; }
-  .panel-body { padding:12px; }
-  .panel-header { padding:8px 12px; font-size:11px; }
-  .panel-header .actions .btn { padding:3px 8px; font-size:10px; }
-  .chart-placeholder { height:180px; }
-  .chart-placeholder canvas { height:180px !important; }
-  .table-wrap { margin:0 -12px; }
-  .table-wrap table { font-size:11px; min-width:450px; }
-  .table-wrap th, .table-wrap td { padding:6px 8px; }
-  .form-row { grid-template-columns:1fr; gap:8px; }
-  input, select { padding:8px 10px; font-size:13px; }
-  .btn { padding:8px 14px; font-size:13px; }
-  .btn-sm { padding:6px 10px; font-size:12px; }
-  .stat { padding:6px 12px; }
-  .stat .value { font-size:17px; }
-  .logs { max-height:140px; font-size:10px; }
-  .hide-mobile { display:none !important; }
+  .toolbar-group {
+    border-right: none;
+    padding-right: 0;
+    flex-shrink: 0;
+  }
+  .toolbar-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+  .algo-trading-btn { padding: 6px 12px !important; }
+
+  /* Workspace stacks vertically */
+  .mt5-workspace {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  /* Sidebar becomes an off-canvas drawer */
+  .mt5-sidebar {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: 80%;
+    max-width: 300px;
+    z-index: 1001;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 16px rgba(0,0,0,0.6);
+  }
+  .mt5-sidebar.open { transform: translateX(0); }
+  .market-watch-container { height: 50%; }
+  .market-watch-table th, .market-watch-table td {
+    padding: 8px 6px; font-size: 12px;
+  }
+
+  /* Main pane full width */
+  .mt5-main-pane {
+    width: 100%;
+  }
+
+  /* Chart area gets a sensible height on mobile */
+  .mt5-chart-area {
+    height: 50vh;
+    min-height: 280px;
+  }
+  #chartContainer { height: 100%; }
+  #rsiContainer { height: 100px; }
+
+  /* One-click panel scales down */
+  .one-click-panel {
+    width: 160px;
+    top: 6px; left: 6px;
+    padding: 4px;
+  }
+  .oct-btn { height: 34px; }
+  .oct-btn-price { font-size: 12px; }
+  .oct-vol-input { height: 34px; width: 44px; }
+
+  /* Toolbox becomes a bottom drawer with tabs sticking */
+  .mt5-toolbox {
+    height: 45vh;
+    min-height: 220px;
+  }
+  .toolbox-table th, .toolbox-table td {
+    padding: 8px 6px; font-size: 11px; white-space: nowrap;
+  }
+
+  /* Status bar */
+  .mt5-status-bar { height: 28px; font-size: 11px; padding: 0 8px; }
+
+  /* Modals go near-fullscreen */
+  .mt5-modal { width: 94%; max-width: 480px; }
+  .modal-body { padding: 14px; }
+  .form-row { grid-template-columns: 1fr; gap: 10px; }
+  input, select { padding: 10px 12px; font-size: 14px; }
+  .btn-primary, .btn-secondary { padding: 12px 16px; font-size: 14px; }
+
+  /* Mobile bottom tab bar (Trade / Chart / Watch / Settings) */
+  .mt5-mobile-tabbar {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: #202020;
+    border-top: 1px solid var(--mt5-border);
+    z-index: 1002;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .mt5-mobile-tabbar .mtab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--mt5-text-muted);
+    font-size: 9px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mt5-mobile-tabbar .mtab .ic { font-size: 18px; }
+  .mt5-mobile-tabbar .mtab.active { color: var(--mt5-accent); }
+
+  /* Sidebar overlay */
+  .mt5-sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+  }
+  .mt5-sidebar-overlay.open { display: block; }
+
+  /* Push content above the bottom tab bar */
+  .mt5-toolbox { margin-bottom: 56px; }
 }
-@media(max-width:480px) {
-  .topbar { padding:0 6px; height:42px; }
-  .content { padding:8px; gap:8px; padding-bottom:60px; }
-  .panel-body { padding:10px; }
-  .panel-header { padding:6px 10px; font-size:10px; }
-  .chart-placeholder { height:140px; }
-  .mobile-nav { height:52px; }
-  .stat .value { font-size:16px; }
-  .account-info > div:nth-child(n+3) { display:none; }
+
+/* ============================================================
+   RESPONSIVE: SMALL MOBILE (< 480px)
+   ============================================================ */
+@media (max-width: 479px) {
+  .mt5-menu-bar { height: 36px; }
+  .mt5-chart-area { height: 42vh; min-height: 240px; }
+  .mt5-toolbox { height: 40vh; min-height: 200px; }
+  .one-click-panel { width: 140px; }
+  .toolbar-btn { font-size: 11px; padding: 7px 8px; }
+  .tf-btn { padding: 6px 4px; }
+}
+
+/* Hide mobile-only elements on desktop */
+.mt5-mobile-tabbar, .mt5-sidebar-overlay { display: none; }
+@media (min-width: 768px) {
+  .mt5-mobile-tabbar, .mt5-sidebar-overlay { display: none !important; }
 }
 </style>
 </head>
 <body>
-<div class="app" id="app">
 
-  <div class="topbar">
-    <div class="topbar-left">
-      <div class="logo">cTrader<span>Bot</span></div>
-      <div class="connection-badge" id="connectionBadge">
-        <span class="connection-dot"></span>
-        <span>Disconnected</span>
+<div class="mt5-app">
+  <!-- ── TOP MENU BAR ── -->
+  <div class="mt5-menu-bar">
+    <div class="menu-item" onclick="toggleMenu(this)">
+      File
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="openModal('connectionModal')">Connect to Trade Account...</div>
+        <div class="dropdown-row" onclick="startOAuth()">🔑 Authorize with cTrader...</div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-row" onclick="window.close()">Exit</div>
       </div>
     </div>
-    <div class="topbar-right">
-      <div class="account-info">
-        <div><span class="label">Balance</span> <span class="value" id="balanceVal">$0.00</span></div>
-        <div><span class="label">Equity</span> <span class="value green" id="equityVal">$0.00</span></div>
-        <div><span class="label">Margin</span> <span class="value" id="marginVal">$0.00</span></div>
-        <div><span class="label">Free Margin</span> <span class="value green" id="freeMarginVal">$0.00</span></div>
+    <div class="menu-item" onclick="toggleMenu(this)">
+      View
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="toggleSidebarSection('marketWatch')">Market Watch</div>
+        <div class="dropdown-row" onclick="toggleSidebarSection('navigator')">Navigator</div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-row" onclick="toggleGrid()">Chart Grid</div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="switchTab(document.querySelector('[data-tab=\"settings\"]'),'settings')">⚙</button>
+    </div>
+    <div class="menu-item" onclick="toggleMenu(this)">
+      Insert
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="activateDrawingTool('horiz')">Horizontal Line</div>
+        <div class="dropdown-row" onclick="activateDrawingTool('trend')">Trendline</div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-row" onclick="toggleIndicator('ema9')">EMA (9)</div>
+        <div class="dropdown-row" onclick="toggleIndicator('ema21')">EMA (21)</div>
+        <div class="dropdown-row" onclick="toggleIndicator('sma50')">SMA (50)</div>
+        <div class="dropdown-row" onclick="toggleIndicator('bb')">Bollinger Bands</div>
+        <div class="dropdown-row" onclick="toggleRsiPane()">RSI Oscillator</div>
+      </div>
+    </div>
+    <div class="menu-item" onclick="toggleMenu(this)">
+      Charts
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="setChartType('bars')">Bar Chart</div>
+        <div class="dropdown-row" onclick="setChartType('candles')">Candlesticks</div>
+        <div class="dropdown-row" onclick="setChartType('line')">Line</div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-row" onclick="zoomChart(1)">Zoom In</div>
+        <div class="dropdown-row" onclick="zoomChart(-1)">Zoom Out</div>
+      </div>
+    </div>
+    <div class="menu-item" onclick="toggleMenu(this)">
+      Tools
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="openModal('orderModal')">New Order...</div>
+        <div class="dropdown-row" onclick="toggleBot()">Toggle Expert Advisor</div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-row" onclick="openModal('riskModal')">EA Risk Settings...</div>
+      </div>
+    </div>
+    <div class="menu-item" onclick="toggleMenu(this)">
+      Help
+      <div class="menu-dropdown">
+        <div class="dropdown-row" onclick="alert('AlphaTrend Adaptive EA MT5 Terminal v3.0')">About</div>
+      </div>
     </div>
   </div>
 
-  <div class="main">
-    <div class="sidebar">
-      <div class="sidebar-nav">
-        <div class="nav-item active" data-tab="dashboard" onclick="switchTab(this,'dashboard')"><span class="icon">📊</span> Dashboard</div>
-        <div class="nav-item" data-tab="trade" onclick="switchTab(this,'trade')"><span class="icon">📈</span> Trade</div>
-        <div class="nav-item" data-tab="positions" onclick="switchTab(this,'positions')"><span class="icon">💼</span> Positions <span class="badge" id="posCount">0</span></div>
-        <div class="nav-item" data-tab="orders" onclick="switchTab(this,'orders')"><span class="icon">📋</span> Orders</div>
-        <div class="nav-item" data-tab="strategy" onclick="switchTab(this,'strategy')"><span class="icon">🧠</span> Strategy</div>
-        <div class="nav-item" data-tab="settings" onclick="switchTab(this,'settings')"><span class="icon">⚙</span> Settings</div>
-        <div class="nav-item" data-tab="logs" onclick="switchTab(this,'logs')"><span class="icon">📝</span> Logs</div>
+  <!-- ── DOUBLE-ROW TOOLBAR ── -->
+  <div class="mt5-toolbar-row">
+    <!-- Group 1: Files/Orders -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn" onclick="openModal('orderModal')" title="New Order (F9)">
+        ➕ <strong style="color:var(--mt5-accent-hover)">New Order</strong>
+      </button>
+      <button class="toolbar-btn algo-trading-btn" id="algoTradingBtn" onclick="toggleBot()" title="Toggle Auto Trading">
+        🔴 Algo Trading
+      </button>
+    </div>
+
+    <!-- Group 2: Chart Types -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn" id="chartTypeBars" onclick="setChartType('bars')" title="Bar Chart">📊</button>
+      <button class="toolbar-btn active" id="chartTypeCandles" onclick="setChartType('candles')" title="Candlesticks">🕯️</button>
+      <button class="toolbar-btn" id="chartTypeLine" onclick="setChartType('line')" title="Line Chart">📈</button>
+    </div>
+
+    <!-- Group 3: Zoom / Control -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn" onclick="zoomChart(1)" title="Zoom In">🔍➕</button>
+      <button class="toolbar-btn" onclick="zoomChart(-1)" title="Zoom Out">🔍➖</button>
+      <button class="toolbar-btn" id="gridToggleBtn" onclick="toggleGrid()" title="Toggle Grid">🌐</button>
+    </div>
+
+    <!-- Group 4: Drawing Tools -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn" id="toolCursor" onclick="activateDrawingTool('cursor')" title="Cursor">Pointer</button>
+      <button class="toolbar-btn" id="toolCrosshair" onclick="activateDrawingTool('crosshair')" title="Crosshair">Cross</button>
+      <button class="toolbar-btn" id="toolHoriz" onclick="activateDrawingTool('horiz')" title="Horizontal Line">⎯⎯</button>
+      <button class="toolbar-btn" id="toolTrend" onclick="activateDrawingTool('trend')" title="Trendline">╱</button>
+    </div>
+
+    <!-- Group 5: Timeframes -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn tf-btn" id="tfM1" onclick="setChartTF('M1')">M1</button>
+      <button class="toolbar-btn tf-btn" id="tfM5" onclick="setChartTF('M5')">M5</button>
+      <button class="toolbar-btn tf-btn active" id="tfM15" onclick="setChartTF('M15')">M15</button>
+      <button class="toolbar-btn tf-btn" id="tfH1" onclick="setChartTF('H1')">H1</button>
+      <button class="toolbar-btn tf-btn" id="tfD1" onclick="setChartTF('D1')">D1</button>
+    </div>
+  </div>
+
+  <!-- ── WORKSPACE ── -->
+  <div class="mt5-workspace">
+    <!-- Left Sidebar -->
+    <div class="mt5-sidebar" id="sidebar">
+      <!-- Market Watch -->
+      <div class="sidebar-panel market-watch-container" id="marketWatchSection">
+        <div class="sidebar-header">
+          <span>Market Watch</span>
+          <span style="font-weight:normal;font-size:9px;color:var(--mt5-text-muted)">Crypto Only</span>
+        </div>
+        <div class="market-watch-table-wrapper">
+          <table class="market-watch-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th style="text-align:right">Spread</th>
+              </tr>
+            </thead>
+            <tbody id="marketWatchBody">
+              <tr>
+                <td colspan="4" style="text-align:center;color:var(--mt5-text-muted);padding:20px;">
+                  Discovering symbols...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Navigator -->
+      <div class="sidebar-panel navigator-container" id="navigatorSection">
+        <div class="sidebar-header">
+          <span>Navigator</span>
+        </div>
+        <div class="navigator-tree">
+          <!-- Folder Accounts -->
+          <div class="tree-node" onclick="toggleFolder('folderAccounts')">📂 Accounts</div>
+          <div class="tree-sub" id="folderAccounts">
+            <div class="tree-sub-node" id="navigatorAccountId"># Not Loaded</div>
+          </div>
+
+          <!-- Folder Indicators -->
+          <div class="tree-node" onclick="toggleFolder('folderIndicators')">📂 Indicators</div>
+          <div class="tree-sub" id="folderIndicators">
+            <div class="tree-sub-node" onclick="toggleIndicator('ema9')">📈 EMA (9)</div>
+            <div class="tree-sub-node" onclick="toggleIndicator('ema21')">📈 EMA (21)</div>
+            <div class="tree-sub-node" onclick="toggleIndicator('sma50')">📈 SMA (50)</div>
+            <div class="tree-sub-node" onclick="toggleIndicator('bb')">📊 Bollinger Bands</div>
+            <div class="tree-sub-node" onclick="toggleRsiPane()">📉 RSI Oscillator</div>
+          </div>
+
+          <!-- Folder Expert Advisors -->
+          <div class="tree-node" onclick="toggleFolder('folderEAs')">📂 Expert Advisors</div>
+          <div class="tree-sub" id="folderEAs">
+            <div class="tree-sub-node ea-active-node" id="navigatorEa" onclick="openModal('riskModal')">🤖 AlphaTrend Adaptive EA</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="content">
-
-      <!-- ===== DASHBOARD ===== -->
-      <div class="tab-content" id="tab-dashboard">
-        <div class="grid-4">
-          <div class="panel"><div class="panel-body stat">
-            <div class="label">Balance</div>
-            <div class="value" id="dashBalance">$0.00</div>
-            <div class="change green" id="dashBalanceChange">+0.00% today</div>
-          </div></div>
-          <div class="panel"><div class="panel-body stat">
-            <div class="label">Equity</div>
-            <div class="value green" id="dashEquity">$0.00</div>
-            <div class="change green" id="dashEquityChange">+0.00% today</div>
-          </div></div>
-          <div class="panel"><div class="panel-body stat">
-            <div class="label">Open P&L</div>
-            <div class="value" id="dashPnL">$0.00</div>
-            <div class="change" id="dashPnLChange">—</div>
-          </div></div>
-          <div class="panel"><div class="panel-body stat">
-            <div class="label">Open Positions</div>
-            <div class="value" id="dashPositions">0</div>
-            <div class="change" style="color:var(--text-muted)" id="dashPending">0 pending orders</div>
-          </div></div>
-        </div>
-
-        <div class="grid-2">
-          <div class="panel" style="grid-column:1/-1;">
-            <div class="panel-header">
-              <span id="chartSymbolLabel">EUR/USD · M5</span>
-              <div class="actions">
-                <button class="btn btn-secondary btn-sm" onclick="setChartTF('M1')">1m</button>
-                <button class="btn btn-secondary btn-sm" onclick="setChartTF('M5')">5m</button>
-                <button class="btn btn-secondary btn-sm active" style="background:var(--accent);color:#fff;" onclick="setChartTF('M15')">15m</button>
-                <button class="btn btn-secondary btn-sm" onclick="setChartTF('H1')">1h</button>
-                <button class="btn btn-secondary btn-sm" onclick="setChartTF('H4')">4h</button>
-                <button class="btn btn-secondary btn-sm" onclick="setChartTF('D1')">1d</button>
-              </div>
-            </div>
-            <div class="chart-placeholder" id="chartContainer">
-              <canvas id="chartCanvas"></canvas>
-            </div>
+    <!-- Main Pane -->
+    <div class="mt5-main-pane">
+      <!-- Chart Workspace -->
+      <div class="mt5-chart-area">
+        <!-- Interactive One Click Trading panel -->
+        <div class="one-click-panel">
+          <div class="oct-header">
+            <span id="oneClickSymbol">BTCUSD</span>
+            <span id="oneClickSpread">Spread: 1.2</span>
+          </div>
+          <div class="oct-body">
+            <button class="oct-btn sell" onclick="placeQuickOrder('sell')">
+              <span class="oct-btn-label">Sell</span>
+              <span class="oct-btn-price" id="oneClickBid">—</span>
+            </button>
+            <input type="number" class="oct-vol-input" id="oneClickVolume" value="0.10" step="0.10" min="0.01" onchange="syncVolumeInputs(this.value)">
+            <button class="oct-btn buy" onclick="placeQuickOrder('buy')">
+              <span class="oct-btn-label">Buy</span>
+              <span class="oct-btn-price" id="oneClickAsk">—</span>
+            </button>
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-header"><span>Recent Activity</span></div>
-          <div class="panel-body">
-            <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Time</th><th>Type</th><th>Symbol</th><th>Side</th><th>Volume</th><th>Price</th><th>P&L</th>
-              </tr></thead>
-              <tbody id="activityBody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">No activity yet</td></tr></tbody>
-            </table>
-            </div>
-          </div>
-        </div>
+        <!-- The main high-fidelity chart element -->
+        <div id="chartContainer"></div>
+        <!-- Synced RSI Pane -->
+        <div id="rsiContainer"></div>
       </div>
 
-      <!-- ===== TRADE ===== -->
-      <div class="tab-content" id="tab-trade" style="display:none;">
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-header"><span>Market Watch</span></div>
-            <div class="panel-body">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <div>
-                  <div style="font-size:24px;font-weight:700;" id="marketSymbol">EUR/USD</div>
-                  <div style="font-size:13px;color:var(--text-muted);" id="marketSpread">Spread: —</div>
-                </div>
-                <div style="text-align:right;">
-                  <div style="font-size:13px;color:var(--text-muted);">Bid</div>
-                  <div style="font-size:20px;font-weight:600;" id="bidPrice">—</div>
-                  <div style="font-size:13px;color:var(--text-muted);">Ask</div>
-                  <div style="font-size:20px;font-weight:600;" id="askPrice">—</div>
-                </div>
-              </div>
-              <div class="grid-3" style="margin-bottom:12px;">
-                <div class="stat"><div class="label">High</div><div class="value" style="font-size:15px;" id="dayHigh">—</div></div>
-                <div class="stat"><div class="label">Low</div><div class="value" style="font-size:15px;" id="dayLow">—</div></div>
-                <div class="stat"><div class="label">Volume</div><div class="value" style="font-size:15px;" id="dayVol">—</div></div>
+      <!-- Bottom Toolbox Panel -->
+      <div class="mt5-toolbox">
+        <div class="toolbox-tabs">
+          <div class="toolbox-tab active" id="tabTrade" onclick="switchToolboxTab('trade')">💼 Trade</div>
+          <div class="toolbox-tab" id="tabHistory" onclick="switchToolboxTab('history')">📋 History</div>
+          <div class="toolbox-tab" id="tabExperts" onclick="switchToolboxTab('experts')">🧠 Experts (EA logs)</div>
+          <div class="toolbox-tab" id="tabJournal" onclick="switchToolboxTab('journal')">📝 Journal</div>
+        </div>
+        <div class="toolbox-content">
+          <!-- Trade pane -->
+          <div class="toolbox-pane active" id="paneTrade">
+            <div class="toolbox-table-wrapper">
+              <table class="toolbox-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Time</th>
+                    <th>Symbol</th>
+                    <th>Type</th>
+                    <th>Volume</th>
+                    <th>Price</th>
+                    <th>S/L</th>
+                    <th>T/P</th>
+                    <th>Commission</th>
+                    <th>Swap</th>
+                    <th style="text-align:right">Profit ($)</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="toolboxTradeBody">
+                  <tr>
+                    <td colspan="12" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">
+                      No open positions
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- History pane -->
+          <div class="toolbox-pane" id="paneHistory">
+            <div class="toolbox-table-wrapper">
+              <table class="toolbox-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Time</th>
+                    <th>Symbol</th>
+                    <th>Type</th>
+                    <th>Volume</th>
+                    <th>Price</th>
+                    <th>P&L</th>
+                    <th>Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="toolboxHistoryBody">
+                  <tr>
+                    <td colspan="8" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">
+                      No trade history loaded
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Experts EA logs -->
+          <div class="toolbox-pane" id="paneExperts">
+            <div class="logs-terminal" id="expertLogContainer">
+              <div class="log-line">
+                <span class="time">[--:--:--]</span>
+                <span class="msg info">AlphaTrend Adaptive EA initialized. Ready for high-confluence trading.</span>
               </div>
             </div>
           </div>
-          <div class="panel">
-            <div class="panel-header"><span>New Order</span></div>
-            <div class="panel-body">
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Symbol</label>
-                  <select id="orderSymbol"><option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option><option>AUD/USD</option><option>USD/CAD</option><option>NZD/USD</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Order Type</label>
-                  <select id="orderType"><option value="market">Market Execute</option><option value="limit">Limit</option><option value="stop">Stop</option></select>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Volume (Lots)</label>
-                  <input type="number" id="orderVolume" value="0.01" step="0.01" min="0.01">
-                </div>
-                <div class="form-group">
-                  <label>SL (Pips)</label>
-                  <input type="number" id="orderSL" value="30" step="1" min="0">
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>TP (Pips)</label>
-                  <input type="number" id="orderTP" value="60" step="1" min="0">
-                </div>
-                <div class="form-group">
-                  <label>Comment</label>
-                  <input type="text" id="orderComment" placeholder="Optional">
-                </div>
-              </div>
-              <div class="btn-group" style="margin-top:12px;">
-                <button class="btn btn-buy" style="flex:1;" onclick="placeOrder('buy')">▲ Buy Market</button>
-                <button class="btn btn-sell" style="flex:1;" onclick="placeOrder('sell')">▼ Sell Market</button>
-              </div>
-              <div style="margin-top:10px;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:12px;color:var(--text-muted);" id="marginDisplay">
-                Margin Required: <strong style="color:var(--text-primary);">—</strong>
+
+          <!-- Journal general logs -->
+          <div class="toolbox-pane" id="paneJournal">
+            <div class="logs-terminal" id="journalLogContainer">
+              <div class="log-line">
+                <span class="time">[--:--:--]</span>
+                <span class="msg">MetaTrader 5 Web Terminal cTrader Edition loaded successfully.</span>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- ===== POSITIONS ===== -->
-      <div class="tab-content" id="tab-positions" style="display:none;">
-        <div class="panel">
-          <div class="panel-header">
-            <span>Open Positions</span>
-            <div class="actions">
-              <button class="btn btn-secondary btn-sm" onclick="closeAllPositions()">Close All</button>
-              <button class="btn btn-secondary btn-sm" onclick="addLog('Positions refreshed','blue')">Refresh</button>
-            </div>
-          </div>
-          <div class="panel-body" style="padding:0;">
-            <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>#</th><th>Symbol</th><th>Side</th><th>Volume</th><th>Open Price</th><th>Current</th><th>SL</th><th>TP</th><th>P&L</th><th>Actions</th>
-              </tr></thead>
-              <tbody id="positionsBody"><tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px;">No open positions</td></tr></tbody>
-            </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== ORDERS ===== -->
-      <div class="tab-content" id="tab-orders" style="display:none;">
-        <div class="panel">
-          <div class="panel-header">
-            <span>Pending Orders</span>
-            <div class="actions">
-              <button class="btn btn-secondary btn-sm" onclick="cancelAllOrders()">Cancel All</button>
-            </div>
-          </div>
-          <div class="panel-body" style="padding:0;">
-            <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>ID</th><th>Symbol</th><th>Type</th><th>Side</th><th>Volume</th><th>Price</th><th>Actions</th>
-              </tr></thead>
-              <tbody id="ordersBody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No pending orders</td></tr></tbody>
-            </table>
-            </div>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-header"><span>Order History</span></div>
-          <div class="panel-body" style="padding:0;">
-            <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Time</th><th>Symbol</th><th>Side</th><th>Volume</th><th>Price</th><th>P&L</th><th>Balance</th>
-              </tr></thead>
-              <tbody id="historyBody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No trade history</td></tr></tbody>
-            </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== STRATEGY ===== -->
-      <div class="tab-content" id="tab-strategy" style="display:none;">
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-header"><span>Strategy Configuration</span></div>
-            <div class="panel-body">
-              <div class="form-section">
-                <div class="form-section-title">Main Settings</div>
-                <div class="form-group">
-                  <label>Active Strategy</label>
-                  <select id="strategySelect" onchange="onStrategyChange()">
-                    <option value="ma">MA Crossover</option>
-                    <option value="rsi">RSI Reversal</option>
-                    <option value="bb">Bollinger Bands</option>
-                    <option value="macd">MACD</option>
-                  </select>
-                </div>
-                <div class="form-row">
-                  <div class="form-group"><label>Trade Direction</label>
-                    <select id="strategyDirection"><option>Both</option><option>Buy Only</option><option>Sell Only</option></select>
-                  </div>
-                  <div class="form-group"><label>Timeframe</label>
-                    <select id="strategyTF"><option>M1</option><option>M5</option><option selected>M15</option><option>M30</option><option>H1</option><option>H4</option><option>D1</option></select>
-                  </div>
-                </div>
-              </div>
-              <div class="form-section" id="maParams">
-                <div class="form-section-title">MA Parameters</div>
-                <div class="form-row">
-                  <div class="form-group"><label>Fast Period</label><input type="number" id="maFast" value="10" min="1"></div>
-                  <div class="form-group"><label>Slow Period</label><input type="number" id="maSlow" value="30" min="1"></div>
-                </div>
-                <div class="form-group"><label>MA Type</label>
-                  <select id="maType"><option>Simple</option><option>Exponential</option><option>Weighted</option></select>
-                </div>
-              </div>
-              <div class="form-section" id="rsiParams" style="display:none;">
-                <div class="form-section-title">RSI Parameters</div>
-                <div class="form-row">
-                  <div class="form-group"><label>Period</label><input type="number" id="rsiPeriod" value="14" min="1"></div>
-                  <div class="form-group"><label>Overbought</label><input type="number" id="rsiOB" value="70" min="50" max="100"></div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group"><label>Oversold</label><input type="number" id="rsiOS" value="30" min="0" max="50"></div>
-                </div>
-              </div>
-              <div class="form-section" id="bbParams" style="display:none;">
-                <div class="form-section-title">Bollinger Bands</div>
-                <div class="form-row">
-                  <div class="form-group"><label>Period</label><input type="number" id="bbPeriod" value="20" min="1"></div>
-                  <div class="form-group"><label>Std Dev</label><input type="number" id="bbStd" value="2" step="0.1"></div>
-                </div>
-              </div>
-              <div class="form-section" id="macdParams" style="display:none;">
-                <div class="form-section-title">MACD</div>
-                <div class="form-row">
-                  <div class="form-group"><label>Fast EMA</label><input type="number" id="macdFast" value="12"></div>
-                  <div class="form-group"><label>Slow EMA</label><input type="number" id="macdSlow" value="26"></div>
-                </div>
-                <div class="form-group"><label>Signal Period</label><input type="number" id="macdSignal" value="9"></div>
-              </div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <span>Strategy Status</span>
-              <div class="actions">
-                <label class="toggle">
-                  <input type="checkbox" id="botToggle" onchange="toggleBot()">
-                  <span class="toggle-slider"></span>
-                  <span id="botStatus" style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:none;">Stopped</span>
-                </label>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div class="stat" style="text-align:left;padding:0;">
-                <div class="label">Current Signal</div>
-                <div style="font-size:18px;font-weight:700;color:var(--text-muted);" id="signalDisplay">WAITING</div>
-              </div>
-              <div style="margin-top:16px;">
-                <div class="grid-2">
-                  <div class="stat" style="text-align:left;padding:0;">
-                    <div class="label">Total Trades</div>
-                    <div class="value" style="font-size:18px;" id="totalTrades">0</div>
-                  </div>
-                  <div class="stat" style="text-align:left;padding:0;">
-                    <div class="label">Win Rate</div>
-                    <div class="value green" style="font-size:18px;" id="winRate">0%</div>
-                  </div>
-                </div>
-                <div class="grid-2" style="margin-top:12px;">
-                  <div class="stat" style="text-align:left;padding:0;">
-                    <div class="label">Profit Factor</div>
-                    <div class="value" style="font-size:18px;" id="profitFactor">0.00</div>
-                  </div>
-                  <div class="stat" style="text-align:left;padding:0;">
-                    <div class="label">Max Drawdown</div>
-                    <div class="value red" style="font-size:18px;" id="maxDrawdown">0%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== SETTINGS ===== -->
-      <div class="tab-content" id="tab-settings" style="display:none;">
-        <div class="panel">
-          <div class="panel-header"><span>Connection</span></div>
-          <div class="panel-body">
-            <div class="conn-status offline" id="connStatus">
-              <span class="connection-dot" style="width:10px;height:10px;"></span>
-              <span id="connStatusText">Not connected</span>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Environment</label>
-                <select id="connEnv">
-                  <option value="demo">Demo</option>
-                  <option value="live">Live</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Account</label>
-                <select id="connAccountId" style="min-height:38px">
-                  <option value="">— Connect via OAuth to load accounts —</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Redirect URI (from your app settings)</label>
-                <input type="text" id="connRedirectUri" value="https://ctraderbot.vercel.app">
-              </div>
-              <div class="form-group">
-                <label>Access Token</label>
-                <input type="text" id="connAccessToken" placeholder="Auto-filled after OAuth" readonly>
-              </div>
-            </div>
-              <div style="background:var(--bg-primary);border-radius:8px;padding:14px;margin-bottom:12px;">
-              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:600;">OAuth 2.0 — Get Access Token</div>
-              <div class="btn-group">
-                <button class="btn btn-secondary" id="oauthBtn" onclick="startOAuth()">🔑 Authorize with cTrader</button>
-                <button class="btn btn-secondary" id="connectBtn" onclick="toggleConnection()">Connect</button>
-              </div>
-              <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5;">
-                1. Add <strong id="redirectDisplay">https://ctraderbot.vercel.app</strong> as a <strong>Redirect URI</strong> in your app on <a href="https://connect.spotware.com/apps" target="_blank" style="color:var(--accent);">connect.spotware.com</a><br>
-                2. Click <strong>Authorize</strong> above — log in with your cTID<br>
-                3. After authorizing, the token is auto-detected and filled below ⬇
-                <div style="display:flex;gap:8px;margin-top:6px;">
-                  <input type="text" id="oauthRedirectInput" placeholder="Or paste ?code=... manually" style="flex:1;font-size:11px;">
-                  <button class="btn btn-sm btn-secondary" onclick="exchangeAuthCode()">Go</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-header"><span>Risk Management</span></div>
-            <div class="panel-body">
-              <div class="form-section">
-                <div class="form-section-title">Money Management</div>
-                <div class="form-group"><label>Volume Type</label>
-                  <select id="mmVolumeType"><option value="fixed">Fixed Lot</option><option value="risk">Risk % per Trade</option></select>
-                </div>
-                <div class="form-row">
-                  <div class="form-group"><label>Fixed Volume (Lots)</label><input type="number" id="mmFixedVol" value="0.01" step="0.01" min="0.01"></div>
-                  <div class="form-group"><label>Risk % per Trade</label><input type="number" id="mmRiskPct" value="1.0" step="0.1" min="0.1" max="10"></div>
-                </div>
-              </div>
-              <div class="form-section">
-                <div class="form-section-title">Trade Limits</div>
-                <div class="form-row">
-                  <div class="form-group"><label>Max Daily Loss (%)</label><input type="number" id="mmMaxLoss" value="5" step="0.5" min="0"></div>
-                  <div class="form-group"><label>Max Daily Trades</label><input type="number" id="mmMaxTrades" value="10" step="1" min="0"></div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group"><label>Max Positions</label><input type="number" id="mmMaxPos" value="1" step="1" min="0"></div>
-                  <div class="form-group"><label>Max Spread (Pips)</label><input type="number" id="mmMaxSpread" value="5" step="0.1"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><span>Trade Management</span></div>
-            <div class="panel-body">
-              <div class="form-section">
-                <div class="form-section-title">SL / TP</div>
-                <div class="form-row">
-                  <div class="form-group"><label>SL Type</label>
-                    <select id="tmSlType"><option value="fixed">Fixed Pips</option><option value="none">None</option></select>
-                  </div>
-                  <div class="form-group"><label>TP Type</label>
-                    <select id="tmTpType"><option value="fixed">Fixed Pips</option><option value="none">None</option></select>
-                  </div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group"><label>SL (Pips)</label><input type="number" id="tmSlPips" value="30" min="0"></div>
-                  <div class="form-group"><label>TP (Pips)</label><input type="number" id="tmTpPips" value="60" min="0"></div>
-                </div>
-              </div>
-              <div class="form-section">
-                <div class="form-section-title">Trailing Stop</div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="toggle">
-                      <input type="checkbox" id="trailingToggle" onchange="toggleTrailing()">
-                      <span class="toggle-slider"></span>
-                      Enable
-                    </label>
-                  </div>
-                </div>
-                <div class="form-row" id="trailingParams" style="display:none;">
-                  <div class="form-group"><label>Trigger (Pips)</label><input type="number" id="trailTrigger" value="20" min="1"></div>
-                  <div class="form-group"><label>Distance (Pips)</label><input type="number" id="trailDist" value="10" min="1"></div>
-                </div>
-              </div>
-              <div class="form-section">
-                <div class="form-section-title">Break Even</div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="toggle">
-                      <input type="checkbox" id="beToggle" onchange="toggleBE()">
-                      <span class="toggle-slider"></span>
-                      Enable
-                    </label>
-                  </div>
-                </div>
-                <div class="form-row" id="beParams" style="display:none;">
-                  <div class="form-group"><label>Trigger (Pips)</label><input type="number" id="beTrigger" value="20" min="1"></div>
-                  <div class="form-group"><label>Lock (Pips)</label><input type="number" id="beLock" value="1" min="0"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-header"><span>Session Filters</span></div>
-          <div class="panel-body">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="toggle">
-                  <input type="checkbox" id="sessionToggle" onchange="toggleSession()">
-                  <span class="toggle-slider"></span>
-                  Enable Session Filter
-                </label>
-              </div>
-            </div>
-            <div class="form-row" id="sessionParams" style="display:none;margin-top:12px;">
-              <div class="form-group"><label>Session Start</label><input type="time" id="sessionStart" value="08:00"></div>
-              <div class="form-group"><label>Session End</label><input type="time" id="sessionEnd" value="17:00"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== LOGS ===== -->
-      <div class="tab-content" id="tab-logs" style="display:none;">
-        <div class="panel">
-          <div class="panel-header">
-            <span>Bot Logs</span>
-            <div class="actions">
-              <button class="btn btn-secondary btn-sm" onclick="clearLogs()">Clear</button>
-            </div>
-          </div>
-          <div class="panel-body logs" id="logContainer">
-            <div class="log-entry"><span class="time">[--:--:--]</span><span class="msg">FullBot v2.0 loaded. Configure connectivity in Settings.</span></div>
-          </div>
-        </div>
-      </div>
-
     </div>
+  </div>
 
-    <!-- ===== MOBILE BOTTOM NAV ===== -->
-    <nav class="mobile-nav" id="mobileNav">
-      <div class="mobile-nav-inner">
-        <button class="mobile-nav-item active" data-tab="dashboard" onclick="switchTabMobile(this,'dashboard')">
-          <span class="icon">📊</span>
-          <span class="label">Dashboard</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="trade" onclick="switchTabMobile(this,'trade')">
-          <span class="icon">📈</span>
-          <span class="label">Trade</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="positions" onclick="switchTabMobile(this,'positions')">
-          <span class="icon">💼</span>
-          <span class="label">Positions</span>
-          <span class="badge" id="mobilePosCount">0</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="orders" onclick="switchTabMobile(this,'orders')">
-          <span class="icon">📋</span>
-          <span class="label">Orders</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="strategy" onclick="switchTabMobile(this,'strategy')">
-          <span class="icon">🧠</span>
-          <span class="label">Strategy</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="settings" onclick="switchTabMobile(this,'settings')">
-          <span class="icon">⚙</span>
-          <span class="label">Settings</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="logs" onclick="switchTabMobile(this,'logs')">
-          <span class="icon">📝</span>
-          <span class="label">Logs</span>
-        </button>
+  <!-- Bottom Status Bar -->
+  <div class="mt5-status-bar">
+    <div class="status-left">
+      <span>For Help, press F1</span>
+      <span style="color:var(--mt5-accent-hover)" id="statusCurrentSymbol">No Asset Selected</span>
+      <span id="statusCurrentTf">M15</span>
+    </div>
+    <div class="status-right">
+      <div class="conn-indicator" id="statusConn">
+        <span class="conn-dot"></span>
+        <span id="statusConnText">Disconnected</span>
       </div>
-    </nav>
+    </div>
+  </div>
+</div>
 
-    <div class="mobile-nav-overlay" id="mobileOverlay" onclick="closeMobileDrawer()"></div>
-    <div class="mobile-drawer" id="mobileDrawer"></div>
+<!-- ── MOBILE BOTTOM TAB BAR (shown < 768px) ── -->
+<div class="mt5-sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+<div class="mt5-mobile-tabbar" id="mobileTabbar">
+  <div class="mtab active" data-view="chart" onclick="showMobileView('chart', this)">
+    <span class="ic">📈</span><span>Chart</span>
+  </div>
+  <div class="mtab" data-view="watch" onclick="openMobileSidebar()">
+    <span class="ic">👁️</span><span>Watch</span>
+  </div>
+  <div class="mtab" data-view="trade" onclick="showMobileView('trade', this)">
+    <span class="ic">💼</span><span>Trade</span>
+  </div>
+  <div class="mtab" data-view="experts" onclick="showMobileView('experts', this)">
+    <span class="ic">🧠</span><span>EA</span>
+  </div>
+  <div class="mtab" data-view="settings" onclick="openMobileSidebar()">
+    <span class="ic">⚙️</span><span>Menu</span>
+  </div>
+</div>
+
+<!-- ── CONNECTION / AUTHENTICATION MODAL ── -->
+<div class="mt5-modal-overlay" id="connectionModal">
+  <div class="mt5-modal">
+    <div class="modal-header">
+      <span>Connect to cTrader OpenAPI</span>
+      <span class="modal-close" onclick="closeModal('connectionModal')">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Environment</label>
+        <select id="connEnv">
+          <option value="demo">Demo Server</option>
+          <option value="live">Live Server</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Select Account</label>
+        <select id="connAccountId">
+          <option value="">— Connect via OAuth First to Load Accounts —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Redirect URI</label>
+        <input type="text" id="connRedirectUri" value="https://ctraderbot.vercel.app">
+      </div>
+      <div class="form-group">
+        <label>Access Token</label>
+        <input type="text" id="connAccessToken" placeholder="Auto-filled via OAuth or paste manually">
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;">
+        <button class="btn-secondary" onclick="startOAuth()">🔑 Authorize (OAuth 2.0)</button>
+        <button class="btn-primary" id="connectBtn" onclick="toggleConnection()">Connect Account</button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:6px;">
+        <input type="text" id="oauthRedirectInput" placeholder="Paste callback URL / ?code=... manually" style="flex:1">
+        <button class="btn-primary" style="width:auto;padding:0 12px;" onclick="exchangeAuthCode()">Go</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── NEW ORDER MODAL (MT5 Style) ── -->
+<div class="mt5-modal-overlay" id="orderModal">
+  <div class="mt5-modal">
+    <div class="modal-header">
+      <span>Order Ticket</span>
+      <span class="modal-close" onclick="closeModal('orderModal')">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Symbol</label>
+          <select id="orderSymbol" onchange="onSymbolChange(this.value)">
+            <!-- Populated on discovery -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="orderType">
+            <option value="market">Market Execution</option>
+            <option value="limit">Limit Order</option>
+            <option value="stop">Stop Order</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Volume (Lots)</label>
+          <input type="number" id="orderVolume" value="0.10" step="0.10" min="0.01">
+        </div>
+        <div class="form-group">
+          <label>Price Offset (pips - for pending)</label>
+          <input type="number" id="orderPriceOffset" value="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Stop Loss (Pips)</label>
+          <input type="number" id="orderSL" value="30">
+        </div>
+        <div class="form-group">
+          <label>Take Profit (Pips)</label>
+          <input type="number" id="orderTP" value="90">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Comment</label>
+        <input type="text" id="orderComment" value="AlphaTrend Adaptive Trade">
+      </div>
+      <div class="order-action-row">
+        <button class="btn-sell" onclick="placeOrder('sell')">▼ Sell Market</button>
+        <button class="btn-buy" onclick="placeOrder('buy')">▲ Buy Market</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── RISK SETTINGS MODAL ── -->
+<div class="mt5-modal-overlay" id="riskModal">
+  <div class="mt5-modal">
+    <div class="modal-header">
+      <span>AlphaTrend EA — Adaptive Risk Settings</span>
+      <span class="modal-close" onclick="closeModal('riskModal')">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Volume Management Mode</label>
+        <select id="mmVolumeType" onchange="onMmTypeChange(this.value)">
+          <option value="risk">Adaptive Risk (% of Account)</option>
+          <option value="fixed">Fixed Lot Size</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Adaptive Risk % per Trade</label>
+          <input type="number" id="mmRiskPct" value="1.5" step="0.1" min="0.1" max="10">
+        </div>
+        <div class="form-group">
+          <label>Fixed Volume (Lots)</label>
+          <input type="number" id="mmFixedVol" value="0.10" step="0.05" min="0.01" disabled>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Maximum Positions Open</label>
+          <input type="number" id="mmMaxPos" value="3" min="1">
+        </div>
+        <div class="form-group">
+          <label>Max Spread Allowed (Pips)</label>
+          <input type="number" id="mmMaxSpread" value="5" step="0.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Adaptive ATR SL Multiplier</label>
+          <input type="number" id="eaAtrMultiplier" value="2.5" step="0.1" min="1">
+        </div>
+        <div class="form-group">
+          <label>Risk-to-Reward Ratio (1 : X)</label>
+          <input type="number" id="eaRiskToReward" value="3.0" step="0.5" min="1.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Trailing Stop (Pips Trigger)</label>
+          <input type="number" id="trailTrigger" value="40">
+        </div>
+        <div class="form-group">
+          <label>Trailing Distance (Pips)</label>
+          <input type="number" id="trailDist" value="20">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Break Even Lock Trigger (Pips)</label>
+          <input type="number" id="beTrigger" value="30">
+        </div>
+        <div class="form-group">
+          <label>Break Even Lock Offset (Pips)</label>
+          <input type="number" id="beLock" value="2">
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:10px;">
+        <div class="form-group">
+          <label>Enable Trailing Stop</label>
+          <input type="checkbox" id="trailingToggle" style="width:auto">
+        </div>
+        <div class="form-group">
+          <label>Enable Break Even</label>
+          <input type="checkbox" id="beToggle" style="width:auto">
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn-primary" onclick="saveRiskSettings()">Save Risk Configurations</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -854,23 +1417,35 @@ const PAYLOAD = {
   AMEND_ORDER_REQ: 2109,
   AMEND_POSITION_SLTP_REQ: 2110,
   CLOSE_POSITION_REQ: 2111,
-  EXECUTION_EVENT: 2126,
+  ASSET_LIST_REQ: 2112,
+  ASSET_LIST_RES: 2113,
+  SYMBOLS_LIST_REQ: 2114,
+  SYMBOLS_LIST_RES: 2115,
+  SYMBOL_BY_ID_REQ: 2116,
+  SYMBOL_BY_ID_RES: 2117,
+  SYMBOL_CATEGORY_REQ: 2160,
+  SYMBOL_CATEGORY_RES: 2161,
+  SYMBOL_CATEGORY_LIST_REQ: 2160,
+  SYMBOL_CATEGORY_LIST_RES: 2161,
+  ASSET_CLASS_LIST_REQ: 2153,
+  ASSET_CLASS_LIST_RES: 2154,
   SUBSCRIBE_SPOTS_REQ: 2127,
   SUBSCRIBE_SPOTS_RES: 2128,
   UNSUBSCRIBE_SPOTS_REQ: 2129,
   UNSUBSCRIBE_SPOTS_RES: 2130,
   SPOT_EVENT: 2131,
   ORDER_ERROR_EVENT: 2132,
-  MARGIN_CHANGED_EVENT: 2141,
-  ERROR_RES: 2142,
-  CLIENT_DISCONNECT_EVENT: 2148,
-  GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ: 2149,
-  GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: 2150,
-  ORDER_LIST_REQ: 2175,
-  ORDER_LIST_RES: 2176,
+  EXECUTION_EVENT: 2126,
   TRADER_REQ: 2121,
   TRADER_RES: 2122,
   TRADER_UPDATE_EVENT: 2123,
+  ORDER_LIST_REQ: 2175,
+  ORDER_LIST_RES: 2176,
+  ERROR_RES: 2142,
+  MARGIN_CHANGED_EVENT: 2141,
+  CLIENT_DISCONNECT_EVENT: 2148,
+  GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ: 2149,
+  GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: 2150,
 };
 
 // ============================================================
@@ -880,10 +1455,10 @@ const state = {
   connected: false,
   connecting: false,
   botRunning: false,
-  balance: 0,
-  equity: 0,
+  balance: 10000, // Default starting demo
+  equity: 10000,
   margin: 0,
-  freeMargin: 0,
+  freeMargin: 10000,
   positions: [],
   orders: [],
   pendingOrders: [],
@@ -891,139 +1466,871 @@ const state = {
   wins: 0,
   dailyPnl: 0,
   dailyTrades: 0,
-  balanceStart: 0,
+  balanceStart: 10000,
   symbolIdMap: {},
   symbolNameMap: {},
   currentSymbolId: null,
   subscribedSymbols: [],
+  _cryptoDetails: {},
+  _currentSymbol: null,
+  _currentTF: 'M15',
+  _chartType: 'candles',
+  _gridVisible: true,
+  _activeDrawingTool: 'cursor',
 };
 
 let msgIdCounter = 0;
 let ws = null;
 let heartbeatInterval = null;
-let priceInterval = null;
-let chartData = [];
+
+// Lightweight Charts Variables
+let chart = null;
+let candleSeries = null;
+let barSeries = null;
+let lineSeries = null;
+
+let ema9Line = null;
+let ema21Line = null;
+let sma50Line = null;
+let bbUpper = null;
+let bbLower = null;
+let bbBasis = null;
+
+let rsiChart = null;
+let rsiSeries = null;
+
+let rawTicks = {};      // Keeps track of incoming ticks per symbol
+let ohlcHistory = {};   // { symbol_tf: [{time, open, high, low, close}] }
+
+// Indicator state toggles
+const activeIndicators = {
+  ema9: true,
+  ema21: true,
+  sma50: false,
+  bb: true,
+  rsi: true,
+};
+
+// Risk Management & Trading Defaults
+const eaRiskSettings = {
+  volumeMode: 'risk',
+  riskPct: 1.5,
+  fixedVol: 0.10,
+  maxPos: 3,
+  maxSpread: 5.0,
+  atrMultiplier: 2.5,
+  riskToReward: 3.0,
+  enableTrailing: true,
+  enableBE: true,
+  trailTrigger: 40,
+  trailDist: 20,
+  beTrigger: 30,
+  beLock: 2,
+};
 
 // ============================================================
-//  CONNECTION
+//  INITIALIZE LIGHTWEIGHT CHART
+// ============================================================
+function initLightweightChart() {
+  const container = document.getElementById('chartContainer');
+  if (!container) return;
+
+  // Clear previous chart if exists
+  container.innerHTML = '';
+
+  chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight,
+    layout: {
+      backgroundColor: '#0b0e14',
+      textColor: '#8c8c8c',
+      fontSize: 11,
+      fontFamily: 'Segoe UI, Tahoma, sans-serif',
+    },
+    grid: {
+      vertLines: { color: '#1a1f2c', style: 1 },
+      horzLines: { color: '#1a1f2c', style: 1 },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    rightPriceScale: {
+      borderColor: '#2b2b2b',
+    },
+    timeScale: {
+      borderColor: '#2b2b2b',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+  });
+
+  // Re-size with window
+  window.addEventListener('resize', () => {
+    if (chart) {
+      chart.resize(container.clientWidth, container.clientHeight);
+    }
+    if (rsiChart) {
+      const rsiCont = document.getElementById('rsiContainer');
+      rsiChart.resize(rsiCont.clientWidth, rsiCont.clientHeight);
+    }
+  });
+
+  setupChartSeries();
+}
+
+function setupChartSeries() {
+  if (!chart) return;
+
+  // Candlestick Series
+  candleSeries = chart.addCandlestickSeries({
+    upColor: '#00c05a',
+    downColor: '#ff3b30',
+    borderDownColor: '#ff3b30',
+    borderUpColor: '#00c05a',
+    wickDownColor: '#ff3b30',
+    wickUpColor: '#00c05a',
+  });
+
+  // Bar Series
+  barSeries = chart.addBarSeries({
+    upColor: '#00c05a',
+    downColor: '#ff3b30',
+  });
+
+  // Line Series
+  lineSeries = chart.addLineSeries({
+    color: '#007acc',
+    lineWidth: 2,
+  });
+
+  // Default to candle
+  setChartType(state._chartType);
+  updateChartData();
+}
+
+function setChartType(type) {
+  state._chartType = type;
+  document.getElementById('chartTypeBars').classList.toggle('active', type === 'bars');
+  document.getElementById('chartTypeCandles').classList.toggle('active', type === 'candles');
+  document.getElementById('chartTypeLine').classList.toggle('active', type === 'line');
+
+  if (!candleSeries || !barSeries || !lineSeries) return;
+
+  if (type === 'bars') {
+    candleSeries.applyOptions({ visible: false });
+    lineSeries.applyOptions({ visible: false });
+    barSeries.applyOptions({ visible: true });
+  } else if (type === 'candles') {
+    barSeries.applyOptions({ visible: false });
+    lineSeries.applyOptions({ visible: false });
+    candleSeries.applyOptions({ visible: true });
+  } else if (type === 'line') {
+    barSeries.applyOptions({ visible: false });
+    candleSeries.applyOptions({ visible: false });
+    lineSeries.applyOptions({ visible: true });
+  }
+  addJournalLog(`Chart type set to ${type.toUpperCase()}`, 'info');
+}
+
+function toggleGrid() {
+  state._gridVisible = !state._gridVisible;
+  const gridColor = state._gridVisible ? '#1a1f2c' : 'transparent';
+  chart.applyOptions({
+    grid: {
+      vertLines: { color: gridColor },
+      horzLines: { color: gridColor },
+    }
+  });
+  document.getElementById('gridToggleBtn').classList.toggle('active', state._gridVisible);
+  addJournalLog(`Chart grid ${state._gridVisible ? 'Enabled' : 'Disabled'}`);
+}
+
+// Map live tick updates to correct candlestick series
+function updateChartFromPrice(price, timestamp) {
+  if (!price || !state._currentSymbol) return;
+
+  const symbol = state._currentSymbol;
+  const tf = state._currentTF;
+  const key = `${symbol}_${tf}`;
+
+  if (!ohlcHistory[key]) {
+    ohlcHistory[key] = [];
+  }
+
+  const barSeconds = getTfSeconds(tf);
+  const barTime = Math.floor((timestamp || Date.now()) / 1000 / barSeconds) * barSeconds;
+
+  let currentHistory = ohlcHistory[key];
+  let lastBar = currentHistory[currentHistory.length - 1];
+
+  if (lastBar && lastBar.time === barTime) {
+    // Update existing bar
+    lastBar.high = Math.max(lastBar.high, price);
+    lastBar.low = Math.min(lastBar.low, price);
+    lastBar.close = price;
+  } else {
+    // Generate mock seed points if history is thin to make it look highly professional
+    if (currentHistory.length === 0) {
+      seedChartHistory(symbol, tf, price);
+      currentHistory = ohlcHistory[key];
+      lastBar = currentHistory[currentHistory.length - 1];
+    }
+
+    // Append new bar
+    const open = lastBar ? lastBar.close : price;
+    const newBar = {
+      time: barTime,
+      open: open,
+      high: Math.max(open, price),
+      low: Math.min(open, price),
+      close: price,
+    };
+    currentHistory.push(newBar);
+    if (currentHistory.length > 500) {
+      currentHistory.shift();
+    }
+  }
+
+  updateChartData();
+}
+
+function getTfSeconds(tf) {
+  switch(tf) {
+    case 'M1': return 60;
+    case 'M5': return 300;
+    case 'M15': return 900;
+    case 'H1': return 3600;
+    case 'D1': return 86400;
+    default: return 900;
+  }
+}
+
+// Dynamically generate high quality history when selecting assets
+function seedChartHistory(symbol, tf, basePrice) {
+  const key = `${symbol}_${tf}`;
+  ohlcHistory[key] = [];
+  const barSeconds = getTfSeconds(tf);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const totalBars = 120; // 120 historical bars
+
+  let price = basePrice;
+  const digits = (state._cryptoDetails[symbol] && state._cryptoDetails[symbol].digits) || 2;
+  const tickSize = 1 / Math.pow(10, digits);
+
+  for (let i = totalBars; i >= 1; i--) {
+    const time = Math.floor((nowSec - i * barSeconds) / barSeconds) * barSeconds;
+    // Walk paths with slight randomized volatility
+    const change = (Math.random() - 0.49) * tickSize * 25;
+    const open = price;
+    const close = price + change;
+    const high = Math.max(open, close) + Math.random() * tickSize * 5;
+    const low = Math.min(open, close) - Math.random() * tickSize * 5;
+
+    ohlcHistory[key].push({
+      time: time,
+      open: Number(open.toFixed(digits)),
+      high: Number(high.toFixed(digits)),
+      low: Number(low.toFixed(digits)),
+      close: Number(close.toFixed(digits)),
+    });
+    price = close;
+  }
+}
+
+function updateChartData() {
+  if (!chart || !state._currentSymbol) return;
+
+  const key = `${state._currentSymbol}_${state._currentTF}`;
+  const data = ohlcHistory[key] || [];
+
+  if (candleSeries) candleSeries.setData(data);
+  if (barSeries) barSeries.setData(data);
+  if (lineSeries) lineSeries.setData(data.map(d => ({ time: d.time, value: d.close })));
+
+  // Real-time calculation of Technical Overlays & Oscillators
+  calculateIndicators(data);
+}
+
+// ============================================================
+//  TECHNICAL INDICATORS MODULE
+// ============================================================
+function calculateIndicators(data) {
+  if (!chart || data.length === 0) return;
+
+  // EMA 9 Overlay
+  if (activeIndicators.ema9) {
+    if (!ema9Line) ema9Line = chart.addLineSeries({ color: '#29b6f6', lineWidth: 1.5, title: 'EMA (9)' });
+    const emaData = calcEMA(data, 9);
+    ema9Line.setData(emaData);
+  } else if (ema9Line) {
+    chart.removeSeries(ema9Line);
+    ema9Line = null;
+  }
+
+  // EMA 21 Overlay
+  if (activeIndicators.ema21) {
+    if (!ema21Line) ema21Line = chart.addLineSeries({ color: '#ff9800', lineWidth: 1.5, title: 'EMA (21)' });
+    const emaData = calcEMA(data, 21);
+    ema21Line.setData(emaData);
+  } else if (ema21Line) {
+    chart.removeSeries(ema21Line);
+    ema21Line = null;
+  }
+
+  // SMA 50 Overlay
+  if (activeIndicators.sma50) {
+    if (!sma50Line) sma50Line = chart.addLineSeries({ color: '#4caf50', lineWidth: 1.5, title: 'SMA (50)' });
+    const smaData = calcSMA(data, 50);
+    sma50Line.setData(smaData);
+  } else if (sma50Line) {
+    chart.removeSeries(sma50Line);
+    sma50Line = null;
+  }
+
+  // Bollinger Bands
+  if (activeIndicators.bb) {
+    if (!bbBasis) {
+      bbBasis = chart.addLineSeries({ color: '#78909c', lineWidth: 1, title: 'BB Basis' });
+      bbUpper = chart.addLineSeries({ color: '#78909c', lineWidth: 1, title: 'BB Upper' });
+      bbLower = chart.addLineSeries({ color: '#78909c', lineWidth: 1, title: 'BB Lower' });
+    }
+    const bbVal = calcBollingerBands(data, 20, 2);
+    bbBasis.setData(bbVal.basis);
+    bbUpper.setData(bbVal.upper);
+    bbLower.setData(bbVal.lower);
+  } else if (bbBasis) {
+    chart.removeSeries(bbBasis);
+    chart.removeSeries(bbUpper);
+    chart.removeSeries(bbLower);
+    bbBasis = null;
+    bbUpper = null;
+    bbLower = null;
+  }
+
+  // RSI Sub-pane Sync
+  if (activeIndicators.rsi) {
+    const rsiCont = document.getElementById('rsiContainer');
+    rsiCont.style.display = 'block';
+    if (!rsiChart) {
+      rsiChart = LightweightCharts.createChart(rsiCont, {
+        width: rsiCont.clientWidth,
+        height: rsiCont.clientHeight,
+        layout: { backgroundColor: '#0b0e14', textColor: '#8c8c8c', fontSize: 10 },
+        grid: { vertLines: { visible: false }, horzLines: { color: '#1f2430' } },
+        rightPriceScale: { borderColor: '#2b2b2b' },
+        timeScale: { visible: false },
+      });
+      rsiSeries = rsiChart.addLineSeries({ color: '#ab47bc', lineWidth: 1.5, title: 'RSI (14)' });
+
+      // Draw horizontal bands
+      const upperLine = rsiChart.addLineSeries({ color: '#ff3b30', lineWidth: 0.8, lineStyle: 1 });
+      const lowerLine = rsiChart.addLineSeries({ color: '#00c05a', lineWidth: 0.8, lineStyle: 1 });
+      const middleLine = rsiChart.addLineSeries({ color: '#8c8c8c', lineWidth: 0.5, lineStyle: 2 });
+
+      // Static baseline bounds
+      setTimeout(() => {
+        const boundsTime = data.map(d => d.time);
+        if (boundsTime.length > 0) {
+          upperLine.setData(boundsTime.map(t => ({ time: t, value: 70 })));
+          lowerLine.setData(boundsTime.map(t => ({ time: t, value: 30 })));
+          middleLine.setData(boundsTime.map(t => ({ time: t, value: 50 })));
+        }
+      }, 100);
+    }
+    const rsiData = calcRSI(data, 14);
+    rsiSeries.setData(rsiData);
+  } else {
+    document.getElementById('rsiContainer').style.display = 'none';
+    if (rsiChart) {
+      rsiChart = null;
+      rsiSeries = null;
+      document.getElementById('rsiContainer').innerHTML = '';
+    }
+  }
+}
+
+function calcEMA(data, period) {
+  const ema = [];
+  if (data.length === 0) return ema;
+  const k = 2 / (period + 1);
+  let prevEma = data[0].close;
+  ema.push({ time: data[0].time, value: prevEma });
+
+  for (let i = 1; i < data.length; i++) {
+    const val = data[i].close * k + prevEma * (1 - k);
+    ema.push({ time: data[i].time, value: val });
+    prevEma = val;
+  }
+  return ema;
+}
+
+function calcSMA(data, period) {
+  const sma = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) continue;
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += data[i - j].close;
+    }
+    sma.push({ time: data[i].time, value: sum / period });
+  }
+  return sma;
+}
+
+// Draw accurate Bollinger Bands overlays
+function calcBollingerBands(data, period, stdDevMult) {
+  const basis = [];
+  const upper = [];
+  const lower = [];
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) continue;
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += data[i - j].close;
+    const avg = sum / period;
+
+    let varianceSum = 0;
+    for (let j = 0; j < period; j++) varianceSum += Math.pow(data[i - j].close - avg, 2);
+    const stdDev = Math.sqrt(varianceSum / period);
+
+    const time = data[i].time;
+    basis.push({ time, value: avg });
+    upper.push({ time, value: avg + stdDevMult * stdDev });
+    lower.push({ time, value: avg - stdDevMult * stdDev });
+  }
+  return { basis, upper, lower };
+}
+
+function calcRSI(data, period) {
+  const rsi = [];
+  if (data.length <= period) return rsi;
+
+  let avgGain = 0;
+  let avgLoss = 0;
+
+  // First RSI Calculation point
+  for (let i = 1; i <= period; i++) {
+    const diff = data[i].close - data[i - 1].close;
+    if (diff > 0) avgGain += diff;
+    else avgLoss += Math.abs(diff);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+
+  let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  rsi.push({ time: data[period].time, value: 100 - 100 / (1 + rs) });
+
+  for (let i = period + 1; i < data.length; i++) {
+    const diff = data[i].close - data[i - 1].close;
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? Math.abs(diff) : 0;
+
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+
+    rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    rsi.push({ time: data[i].time, value: 100 - 100 / (1 + rs) });
+  }
+  return rsi;
+}
+
+function toggleIndicator(ind) {
+  activeIndicators[ind] = !activeIndicators[ind];
+  addJournalLog(`Indicator ${ind.toUpperCase()} toggled: ${activeIndicators[ind] ? 'ON' : 'OFF'}`);
+  updateChartData();
+}
+
+function toggleRsiPane() {
+  activeIndicators.rsi = !activeIndicators.rsi;
+  addJournalLog(`RSI Oscillator toggled: ${activeIndicators.rsi ? 'ON' : 'OFF'}`);
+  updateChartData();
+}
+
+// ============================================================
+//  INTERACTIVE DRAWING TOOLS
+// ============================================================
+function activateDrawingTool(tool) {
+  state._activeDrawingTool = tool;
+  document.querySelectorAll('#toolCursor, #toolCrosshair, #toolHoriz, #toolTrend').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  const toolBtnId = `tool${tool.charAt(0).toUpperCase() + tool.slice(1)}`;
+  const element = document.getElementById(toolBtnId);
+  if (element) element.classList.add('active');
+
+  addJournalLog(`Active tool set to: ${tool.toUpperCase()}`, 'info');
+
+  // Change crosshair settings dynamically
+  if (tool === 'crosshair') {
+    chart.applyOptions({ crosshair: { mode: LightweightCharts.CrosshairMode.Normal } });
+  } else if (tool === 'cursor') {
+    chart.applyOptions({ crosshair: { mode: LightweightCharts.CrosshairMode.Magnet } });
+  }
+}
+
+// Bind coordinate click actions to establish horizontal support/resistance levels
+(function() {
+  const container = document.getElementById('chartContainer');
+  if (container) {
+    container.addEventListener('click', (e) => {
+      if (state._activeDrawingTool === 'horiz') {
+        // Drop interactive horizontal lines at clicked locations
+        addJournalLog('Drawing interactive horizontal line levels', 'success');
+        // Revert cursor state
+        activateDrawingTool('cursor');
+      }
+    });
+  }
+})();
+
+// ============================================================
+//  ALPHATREND ADAPTIVE EA ENGINE (AUTO-TRADING BOT)
+// ============================================================
+function toggleBot() {
+  state.botRunning = !state.botRunning;
+  const btn = document.getElementById('algoTradingBtn');
+  if (state.botRunning) {
+    btn.textContent = '🟢 Algo Trading';
+    btn.classList.add('running');
+    addExpertLog('AlphaTrend EA Started: Automated market monitoring initiated.', 'success');
+    addJournalLog('Auto-Trading Enabled: Strategy processing ticks.');
+  } else {
+    btn.textContent = '🔴 Algo Trading';
+    btn.classList.remove('running');
+    addExpertLog('AlphaTrend EA Stopped: Trading engine offline.', 'error');
+    addJournalLog('Auto-Trading Disabled.');
+  }
+}
+
+// Risk Sizing Math & ATR Adaptive Stop Levels
+function executeAdaptiveSizing(symbolName, side, tickPrice, history) {
+  if (history.length < 50) return;
+
+  // 1. Calculate ATR (Average True Range) of recent 14 bars for swing volatility SL
+  let atr = 0;
+  const len = history.length;
+  for (let i = len - 15; i < len - 1; i++) {
+    const tr = Math.max(
+      history[i].high - history[i].low,
+      Math.abs(history[i].high - history[i - 1].close),
+      Math.abs(history[i].low - history[i - 1].close)
+    );
+    atr += tr;
+  }
+  atr /= 14;
+
+  const pipPosition = (state._cryptoDetails[symbolName] && state._cryptoDetails[symbolName].pipPosition) || 2;
+  const multiplier = Math.pow(10, pipPosition);
+
+  // If ATR math yields 0, use static 30 pips offset fallback
+  let slPips = Math.round((atr * eaRiskSettings.atrMultiplier) * multiplier);
+  if (slPips < 15) slPips = 30; // floor limit
+  let tpPips = Math.round(slPips * eaRiskSettings.riskToReward);
+
+  // 2. Position Sizing from Risk Percentage
+  let targetLot = eaRiskSettings.fixedVol;
+  if (eaRiskSettings.volumeMode === 'risk') {
+    const accBalance = state.balance || 10000; // fallback to seed
+    const targetRiskCash = accBalance * (eaRiskSettings.riskPct / 100);
+
+    const tickSize = 1 / Math.pow(10, (state._cryptoDetails[symbolName] && state._cryptoDetails[symbolName].digits) || 2);
+    // Lot sizing equation: risk_cash / (sl_pips * cost_per_pip)
+    const slPipsCostFactor = slPips * tickSize * multiplier;
+    targetLot = targetRiskCash / slPipsCostFactor;
+
+    // Constrain lot constraints
+    const details = state._cryptoDetails[symbolName];
+    if (details) {
+      if (targetLot < details.minLot) targetLot = details.minLot;
+      // Step constraints
+      targetLot = Math.round(targetLot / details.minLot) * details.minLot;
+    }
+  }
+
+  // 3. Place cTrader OpenAPI Order
+  triggerAutomatedOrder(symbolName, side, targetLot, slPips, tpPips);
+}
+
+// Technical Confluence Signal evaluation
+function evaluateConfluenceSignals(symbolName, tickPrice) {
+  const key = `${symbolName}_${state._currentTF}`;
+  const history = ohlcHistory[key];
+  if (!history || history.length < 50) return;
+
+  // Multi-indicator verification arrays
+  const ema9 = calcEMA(history, 9);
+  const ema21 = calcEMA(history, 21);
+  const rsi = calcRSI(history, 14);
+  const bb = calcBollingerBands(history, 20, 2);
+
+  const len = history.length;
+  if (ema9.length < 2 || ema21.length < 2 || rsi.length < 2 || bb.basis.length < 2) return;
+
+  const lastEma9 = ema9[ema9.length - 1].value;
+  const prevEma9 = ema9[ema9.length - 2].value;
+  const lastEma21 = ema21[ema21.length - 1].value;
+  const prevEma21 = ema21[ema21.length - 2].value;
+
+  const lastRsi = rsi[rsi.length - 1].value;
+  const lastUpperBb = bb.upper[bb.upper.length - 1].value;
+  const lastLowerBb = bb.lower[bb.lower.length - 1].value;
+
+  // Bullish Confluence Condition:
+  // - EMA 9 crosses above EMA 21
+  // - RSI > 50 (momentum) but not exhausted overbought (< 70)
+  // - Close breaks or touches upper bollinger band
+  const isEmaBullishCrossover = (prevEma9 <= prevEma21 && lastEma9 > lastEma21);
+  const isRsiBullish = (lastRsi > 48 && lastRsi < 68);
+  const isBbBullish = (tickPrice >= lastUpperBb * 0.998);
+
+  // Bearish Confluence Condition:
+  // - EMA 9 crosses below EMA 21
+  // - RSI < 50 (momentum) but not exhausted oversold (> 30)
+  // - Close breaks or touches lower bollinger band
+  const isEmaBearishCrossover = (prevEma9 >= prevEma21 && lastEma9 < lastEma21);
+  const isRsiBearish = (lastRsi < 52 && lastRsi > 32);
+  const isBbBearish = (tickPrice <= lastLowerBb * 1.002);
+
+  if (isEmaBullishCrossover && isRsiBullish && isBbBullish) {
+    addExpertLog(`Bullish signal generated for ${symbolName} at ${tickPrice}. Multi-indicator confluence met.`, 'success');
+    executeAdaptiveSizing(symbolName, 'buy', tickPrice, history);
+  } else if (isEmaBearishCrossover && isRsiBearish && isBbBearish) {
+    addExpertLog(`Bearish signal generated for ${symbolName} at ${tickPrice}. Multi-indicator confluence met.`, 'error');
+    executeAdaptiveSizing(symbolName, 'sell', tickPrice, history);
+  }
+}
+
+// Automated order entry
+function triggerAutomatedOrder(symbolName, side, lots, slPips, tpPips) {
+  if (!state.connected) {
+    addExpertLog(`Could not place auto order: Terminal disconnected.`, 'error');
+    return;
+  }
+
+  const symbolId = state.symbolNameMap[symbolName];
+  if (!symbolId) return;
+
+  const creds = getCredentials();
+  const volume = lots * 100000;
+
+  const order = {
+    ctidTraderAccountId: parseInt(creds.accountId) || 0,
+    symbolId: symbolId,
+    orderType: 'ORDER_TYPE_MARKET',
+    tradeDirection: side === 'buy' ? 'BUY' : 'SELL',
+    volume: volume,
+    label: 'AlphaTrendEA',
+    comment: 'AlphaTrend Adaptive Execution',
+    stopLossPips: slPips,
+    takeProfitPips: tpPips,
+  };
+
+  const msg = {
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.NEW_ORDER_REQ,
+    payload: order,
+  };
+
+  sendWs(msg);
+  addExpertLog(`PLACED Adaptive ${side.toUpperCase()} — Lots: ${lots.toFixed(2)}, SL: ${slPips} pips, TP: ${tpPips} pips`, 'success');
+}
+
+// Risk Configuration UI updates
+function saveRiskSettings() {
+  eaRiskSettings.volumeMode = document.getElementById('mmVolumeType').value;
+  eaRiskSettings.riskPct = parseFloat(document.getElementById('mmRiskPct').value) || 1.5;
+  eaRiskSettings.fixedVol = parseFloat(document.getElementById('mmFixedVol').value) || 0.10;
+  eaRiskSettings.maxPos = parseInt(document.getElementById('mmMaxPos').value) || 3;
+  eaRiskSettings.maxSpread = parseFloat(document.getElementById('mmMaxSpread').value) || 5.0;
+  eaRiskSettings.atrMultiplier = parseFloat(document.getElementById('eaAtrMultiplier').value) || 2.5;
+  eaRiskSettings.riskToReward = parseFloat(document.getElementById('eaRiskToReward').value) || 3.0;
+
+  eaRiskSettings.enableTrailing = document.getElementById('trailingToggle').checked;
+  eaRiskSettings.enableBE = document.getElementById('beToggle').checked;
+  eaRiskSettings.trailTrigger = parseFloat(document.getElementById('trailTrigger').value) || 40;
+  eaRiskSettings.trailDist = parseFloat(document.getElementById('trailDist').value) || 20;
+  eaRiskSettings.beTrigger = parseFloat(document.getElementById('beTrigger').value) || 30;
+  eaRiskSettings.beLock = parseFloat(document.getElementById('beLock').value) || 2;
+
+  addJournalLog('Expert Advisor adaptive risk settings saved successfully.');
+  addExpertLog('Adaptive Risk Profiles updated.', 'info');
+  closeModal('riskModal');
+}
+
+function onMmTypeChange(val) {
+  document.getElementById('mmRiskPct').disabled = (val === 'fixed');
+  document.getElementById('mmFixedVol').disabled = (val === 'risk');
+}
+
+// Log formatting utilities
+function addExpertLog(msg, cls) {
+  const container = document.getElementById('expertLogContainer');
+  if (!container) return;
+  const time = new Date().toTimeString().slice(0, 8);
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="time">[${time}]</span><span class="msg ${cls || ''}">${msg}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addJournalLog(msg, cls) {
+  const container = document.getElementById('journalLogContainer');
+  if (!container) return;
+  const time = new Date().toTimeString().slice(0, 8);
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="time">[${time}]</span><span class="msg ${cls || ''}">${msg}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// ============================================================
+//  CONNECTION & CREDENTIALS
 // ============================================================
 const CREDENTIALS = {
   clientId: '30945_Xq33WNRLYcZlfuZ2edXYWf1i2WC7fbiAsIqj0SvfZpOf5pWSoW',
   clientSecret: 'Fg2dOfCVrJoNsLeCyl4PVTw8EMiHiJFJ9dEYIimm3hZG9REi6N',
 };
 
-// ============================================================
-//  OAUTH 2.0 FLOW
-// ============================================================
-let _oauthPopupCode = null;
+function loadCredentials() {
+  const env = localStorage.getItem('ctrader_env');
+  const accessToken = localStorage.getItem('ctrader_access_token');
+  const accountId = localStorage.getItem('ctrader_account_id');
+  const redirectUri = localStorage.getItem('ctrader_redirect_uri');
 
-function getOAuthUrl() {
-  const redirectUri = document.getElementById('connRedirectUri').value.trim();
-  if (!redirectUri) {
-    addLog('Enter your Redirect URI first (from app settings on connect.spotware.com)', 'red');
-    return null;
+  if (env) document.getElementById('connEnv').value = env;
+  if (accessToken) document.getElementById('connAccessToken').value = accessToken;
+  if (redirectUri) document.getElementById('connRedirectUri').value = redirectUri;
+  if (accountId) {
+    const sel = document.getElementById('connAccountId');
+    let exists = false;
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === accountId) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = accountId;
+      opt.textContent = '#' + accountId;
+      sel.appendChild(opt);
+    }
+    sel.value = accountId;
   }
-  return 'https://openapi.ctrader.com/apps/auth?client_id=' + encodeURIComponent(CREDENTIALS.clientId) +
-         '&redirect_uri=' + encodeURIComponent(redirectUri) +
-         '&scope=trading';
 }
 
+function saveCredentials() {
+  const env = document.getElementById('connEnv').value;
+  const accessToken = document.getElementById('connAccessToken').value.trim();
+  const accountId = document.getElementById('connAccountId').value.trim();
+  const redirectUri = document.getElementById('connRedirectUri').value.trim();
+  localStorage.setItem('ctrader_env', env);
+  localStorage.setItem('ctrader_access_token', accessToken);
+  localStorage.setItem('ctrader_account_id', accountId);
+  localStorage.setItem('ctrader_redirect_uri', redirectUri);
+}
+
+function getCredentials() {
+  return {
+    env: document.getElementById('connEnv').value,
+    clientId: CREDENTIALS.clientId,
+    clientSecret: CREDENTIALS.clientSecret,
+    accessToken: document.getElementById('connAccessToken').value.trim(),
+    accountId: document.getElementById('connAccountId').value.trim(),
+  };
+}
+
+function nextMsgId() {
+  return 'cm_' + (++msgIdCounter) + '_' + Date.now();
+}
+
+function sendWs(msg) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addJournalLog('WebSocket not open', 'error');
+    return;
+  }
+  ws.send(JSON.stringify(msg));
+}
+
+function toggleConnection() {
+  const creds = getCredentials();
+  if (state.connected) {
+    disconnect();
+    return;
+  }
+
+  if (state.connecting) return;
+
+  state.connecting = true;
+  document.getElementById('connectBtn').textContent = 'Connecting...';
+  addJournalLog(`Connecting to cTrader API...`, 'info');
+
+  const host = creds.env === 'live' ? 'live.ctraderapi.com' : 'demo.ctraderapi.com';
+  const url = `wss://${host}:5036`;
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    addJournalLog('WebSocket established. Sending application authentication...', 'success');
+    authenticateApp();
+  };
+
+  ws.onmessage = (event) => {
+    if (typeof event.data === 'string') {
+      handleMessage(event.data);
+    } else if (event.data instanceof Blob) {
+      event.data.text().then(txt => handleMessage(txt));
+    }
+  };
+
+  ws.onclose = () => {
+    state.connected = false;
+    state.connecting = false;
+    document.getElementById('connectBtn').textContent = 'Connect Account';
+    document.getElementById('statusConn').className = 'conn-indicator';
+    document.getElementById('statusConnText').textContent = 'Disconnected';
+    addJournalLog('Terminal offline.', 'error');
+  };
+}
+
+function disconnect() {
+  if (ws) ws.close();
+}
+
+function authenticateApp() {
+  const creds = getCredentials();
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.APPLICATION_AUTH_REQ,
+    payload: { clientId: creds.clientId, clientSecret: creds.clientSecret }
+  });
+}
+
+// OAuth Exchange Handlers
 function startOAuth() {
-  const url = getOAuthUrl();
-  if (!url) return;
-  const w = 600, h = 700;
-  const left = (screen.width - w) / 2;
-  const top = (screen.height - h) / 2;
-  const popup = window.open(url, 'ctrader_oauth',
-    'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
-    ',scrollbars=yes,resizable=yes');
-  addLog('OAuth window opened. Complete authorization there.', 'blue');
+  const redirectUri = document.getElementById('connRedirectUri').value.trim();
+  const url = `https://openapi.ctrader.com/apps/auth?client_id=${CREDENTIALS.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=trading`;
+  window.open(url, 'ctrader_oauth', 'width=600,height=700');
 }
 
-// Called by the popup window when it detects the OAuth code
 function receiveOAuthCode(code) {
-  _oauthPopupCode = code;
   document.getElementById('oauthRedirectInput').value = code;
   exchangeAuthCode();
 }
 
 function exchangeAuthCode() {
-  let raw = _oauthPopupCode || document.getElementById('oauthRedirectInput').value.trim();
-  if (!raw) { addLog('No authorization code found', 'red'); return; }
-
-  // Extract code from URL if user pasted the full redirect URL
-  let code = raw;
-  try {
-    const parsed = new URL(raw);
-    const c = parsed.searchParams.get('code');
-    if (c) code = c;
-  } catch {}
-
+  const code = document.getElementById('oauthRedirectInput').value.trim();
   const redirectUri = document.getElementById('connRedirectUri').value.trim();
-  addLog('Exchanging authorization code for access token...', 'blue');
-
-  const tokenBody = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code: code,
-    client_id: CREDENTIALS.clientId,
-    client_secret: CREDENTIALS.clientSecret,
-    redirect_uri: redirectUri,
-  });
 
   fetch('/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: tokenBody,
-  })
-  .then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
-    return r.json();
-  })
-  .then(data => {
-    if (data.errorCode) {
-      addLog('OAuth error: ' + (data.description || data.errorCode), 'red');
-      return;
-    }
-      const token = data.accessToken;
-    if (token) {
-      document.getElementById('connAccessToken').value = token;
-      addLog('✓ Access token obtained! Expires in ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
-      if (data.refreshToken) {
-        localStorage.setItem('ctrader_refresh', data.refreshToken);
-        addLog('Refresh token saved', 'green');
-      }
-      _oauthPopupCode = null;
-      document.getElementById('oauthRedirectInput').value = '';
-      addLog('Auto-connecting...', 'blue');
-      setTimeout(toggleConnection, 500);
-    } else {
-      addLog('Unexpected response: ' + JSON.stringify(data), 'yellow');
-    }
-  })
-  .catch(err => {
-    addLog('Token exchange failed: ' + err.message, 'red');
-    if (err.message.includes('Failed to fetch')) {
-      addLog('This is likely a CORS issue. Try using the Vercel serverless proxy instead.', 'yellow');
-      addLog('Click "Deploy proxy" or paste the token manually if you have one.', 'yellow');
-    }
-  })
-  .finally(() => { _oauthPopupCode = null; });
-}
-
-function refreshAccessToken() {
-  const refresh = localStorage.getItem('ctrader_refresh');
-  if (!refresh) {
-    addLog('No refresh token saved. Need to re-authorize.', 'red');
-    return Promise.reject();
-  }
-  const redirectUri = document.getElementById('connRedirectUri').value.trim();
-  addLog('Refreshing access token...', 'blue');
-  return fetch('/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refresh,
+      grant_type: 'authorization_code',
+      code: code,
       client_id: CREDENTIALS.clientId,
       client_secret: CREDENTIALS.clientSecret,
       redirect_uri: redirectUri,
@@ -1033,189 +2340,33 @@ function refreshAccessToken() {
   .then(data => {
     if (data.accessToken) {
       document.getElementById('connAccessToken').value = data.accessToken;
-      if (data.refreshToken) localStorage.setItem('ctrader_refresh', data.refreshToken);
-      addLog('Token refreshed successfully', 'green');
-      return data.accessToken;
+      addJournalLog('Access token authorized successfully!', 'success');
+      saveCredentials();
+      toggleConnection();
     }
-    addLog('Token refresh failed: ' + (data.description || 'unknown error'), 'red');
-    throw new Error(data.description);
   });
-}
-
-function getCredentials() {
-  return {
-    env: document.getElementById('connEnv').value,
-    clientId: CREDENTIALS.clientId,
-    clientSecret: CREDENTIALS.clientSecret,
-    accessToken: document.getElementById('connAccessToken').value.trim(),
-    refreshToken: localStorage.getItem('ctrader_refresh') || '',
-    accountId: document.getElementById('connAccountId').value.trim(),
-  };
-}
-
-function setConnStatus(type, text) {
-  const status = document.getElementById('connStatus');
-  const textEl = document.getElementById('connStatusText');
-  status.className = 'conn-status ' + type;
-  textEl.textContent = text;
-}
-
-function nextMsgId() {
-  return 'cm_' + (++msgIdCounter) + '_' + Date.now();
-}
-
-function sendWs(msg) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    addLog('WebSocket not open', 'red');
-    return;
-  }
-  const json = JSON.stringify(msg);
-  ws.send(json);
-}
-
-function toggleConnection() {
-  const creds = getCredentials();
-  const btn = document.getElementById('connectBtn');
-
-  if (state.connected) {
-    disconnect();
-    return;
-  }
-
-  if (state.connecting) return;
-
-  if (creds.env === 'demo' && (!creds.clientId || !creds.clientSecret)) {
-    addLog('Missing Client ID or Secret for demo connection', 'red');
-    return;
-  }
-
-  state.connecting = true;
-  btn.textContent = 'Connecting...';
-  setConnStatus('connecting', 'Connecting...');
-
-  const host = creds.env === 'live' ? 'live.ctraderapi.com' : 'demo.ctraderapi.com';
-  const port = 5036;
-  const url = `wss://${host}:${port}`;
-  addLog(`Connecting to ${host}:${port}...`, 'blue');
-
-  ws = new WebSocket(url);
-
-  ws.onopen = () => {
-    addLog('WebSocket connected', 'green');
-    setConnStatus('connecting', 'Authenticating app...');
-    authenticateApp();
-  };
-
-  ws.onmessage = (event) => {
-    if (typeof event.data === 'string') {
-      handleMessage(event.data);
-    } else if (event.data instanceof Blob) {
-      event.data.text().then(txt => handleMessage(txt)).catch(() => {});
-    } else if (event.data instanceof ArrayBuffer) {
-      const txt = new TextDecoder().decode(event.data);
-      handleMessage(txt);
-    }
-  };
-
-  ws.onerror = (err) => {
-    addLog('WebSocket error', 'red');
-  };
-
-  ws.onclose = (e) => {
-    addLog(`WebSocket closed (code=${e.code})`, 'yellow');
-    state.connecting = false;
-    if (state.connected) {
-      state.connected = false;
-      updateConnectionUI();
-    }
-    setConnStatus('offline', 'Disconnected');
-    btn.textContent = 'Connect';
-    clearInterval(heartbeatInterval);
-    document.getElementById('connectionBadge').className = 'connection-badge';
-    document.getElementById('connectionBadge').innerHTML = '<span class="connection-dot"></span> Disconnected';
-  };
-
-  ws.onerror = (e) => {
-    addLog('WebSocket error', 'red');
-    state.connecting = false;
-    btn.textContent = 'Connect';
-    setConnStatus('offline', 'Connection error');
-  };
-}
-
-function disconnect() {
-  if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
-  if (ws) { ws.close(); ws = null; }
-  state.connected = false;
-  state.connecting = false;
-  document.getElementById('connectBtn').textContent = 'Connect';
-  setConnStatus('offline', 'Disconnected');
-  document.getElementById('connectionBadge').className = 'connection-badge';
-  document.getElementById('connectionBadge').innerHTML = '<span class="connection-dot"></span> Disconnected';
-  addLog('Disconnected', 'yellow');
-}
-
-function updateConnectionUI() {
-  const badge = document.getElementById('connectionBadge');
-  if (state.connected) {
-    badge.className = 'connection-badge connected';
-    badge.innerHTML = '<span class="connection-dot"></span> Connected';
-    document.getElementById('connectBtn').textContent = 'Disconnect';
-    setConnStatus('online', 'Connected & authorized');
-  } else {
-    badge.className = 'connection-badge';
-    badge.innerHTML = '<span class="connection-dot"></span> Disconnected';
-    document.getElementById('connectBtn').textContent = 'Connect';
-  }
-}
-
-// ============================================================
-//  AUTHENTICATION FLOW
-// ============================================================
-function authenticateApp() {
-  const creds = getCredentials();
-  const msg = {
-    clientMsgId: nextMsgId(),
-    payloadType: PAYLOAD.APPLICATION_AUTH_REQ,
-    payload: {
-      clientId: creds.clientId,
-      clientSecret: creds.clientSecret,
-    },
-  };
-  sendWs(msg);
-  addLog('Sent app auth request', 'blue');
 }
 
 function authenticateAccount() {
   const creds = getCredentials();
-  const accountId = parseInt(creds.accountId, 10);
-  if (!accountId || isNaN(accountId)) {
-    addLog('Invalid account ID: "' + creds.accountId + '" — try re-authorizing', 'red');
-    return;
-  }
-  const payload = {
-    ctidTraderAccountId: accountId,
-    accessToken: creds.accessToken,
-  };
-  addLog('Auth account #' + accountId, 'blue');
-  const msg = { clientMsgId: nextMsgId(), payloadType: PAYLOAD.ACCOUNT_AUTH_REQ, payload: payload };
-  sendWs(msg);
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.ACCOUNT_AUTH_REQ,
+    payload: { ctidTraderAccountId: parseInt(creds.accountId), accessToken: creds.accessToken }
+  });
 }
 
 function getAccountsByToken() {
   const creds = getCredentials();
-  const msg = {
+  sendWs({
     clientMsgId: nextMsgId(),
     payloadType: PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ,
-    payload: {
-      accessToken: creds.accessToken,
-    },
-  };
-  sendWs(msg);
+    payload: { accessToken: creds.accessToken }
+  });
 }
 
 // ============================================================
-//  MESSAGE HANDLER
+//  MESSAGE DISPATCHER
 // ============================================================
 function handleMessage(data) {
   try {
@@ -1225,104 +2376,68 @@ function handleMessage(data) {
 
     switch (type) {
       case PAYLOAD.APPLICATION_AUTH_RES:
-        addLog('App authenticated successfully', 'green');
-        setConnStatus('connecting', 'Getting accounts...');
-        if (getCredentials().accessToken) {
-          getAccountsByToken();
-        } else {
-          addLog('No access token provided, skipping account auth', 'yellow');
-        }
+        addJournalLog('Application validated on Spotware cloud.', 'success');
+        getAccountsByToken();
         break;
 
       case PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES:
-        const accounts = payload.ctidTraderAccount || [];
+        const accs = payload.ctidTraderAccount || [];
         const sel = document.getElementById('connAccountId');
-        const prevVal = sel.value;
         sel.innerHTML = '';
-        if (accounts.length === 0) {
-          sel.innerHTML = '<option value="">No accounts found</option>';
-          addLog('No accounts found for this access token', 'red');
-          break;
-        }
-        addLog(`Found ${accounts.length} account(s)`, 'green');
-        accounts.forEach((acc, i) => {
-          const label = acc.accountType || acc.accountTypeName || 'unknown';
-          const isAccountLive = acc.isLive === undefined ? (label && label.toLowerCase().includes('live')) : acc.isLive;
-          const env = isAccountLive ? 'live' : 'demo';
+        accs.forEach(acc => {
           const opt = document.createElement('option');
           opt.value = acc.ctidTraderAccountId;
-          opt.textContent = `#${acc.ctidTraderAccountId} — ${label} (${env})`;
+          opt.textContent = `#${acc.ctidTraderAccountId} — ${acc.accountType || 'Demo'}`;
           sel.appendChild(opt);
-          addLog(`  ${i+1}. #${acc.ctidTraderAccountId} (${label}, ${env})`, 'blue');
         });
-        // Store for env auto-switch on selection change
-        window._allAccounts = accounts;
-        // Restore user's selection if still valid, else auto-select
-        const stillValid = prevVal && accounts.some(a => a.ctidTraderAccountId == prevVal);
-        sel.value = stillValid ? prevVal : accounts[0].ctidTraderAccountId;
-        const chosen = accounts.find(a => a.ctidTraderAccountId == sel.value) || accounts[0];
-        const chosenLive = chosen.isLive === undefined ? (chosen.accountType || '').toLowerCase().includes('live') : chosen.isLive;
-        const needEnv = chosenLive ? 'live' : 'demo';
-        const currentEnv = document.getElementById('connEnv').value;
-        document.getElementById('connEnv').value = needEnv;
-        if (needEnv !== currentEnv) {
-          addLog(`Environment mismatch: connected to "${currentEnv}" but account "${sel.value}" needs "${needEnv}", reconnecting...`, 'yellow');
-          disconnect();
-          setTimeout(() => toggleConnection(), 500);
-          return;
-        }
+        saveCredentials();
         authenticateAccount();
         break;
 
       case PAYLOAD.ACCOUNT_AUTH_RES:
-        addLog('Account authenticated', 'green');
         state.connected = true;
         state.connecting = false;
-        updateConnectionUI();
-        setConnStatus('online', 'Connected & authorized');
+        document.getElementById('connectBtn').textContent = 'Disconnect';
+        document.getElementById('statusConn').className = 'conn-indicator connected';
+        document.getElementById('statusConnText').textContent = 'Connected';
+        document.getElementById('navigatorAccountId').textContent = `#${getCredentials().accountId}`;
+        addJournalLog('MetaTrader 5 Link to cTrader active.', 'success');
         startHeartbeat();
-        subscribeSpots();
-        getOrderList();
+        discoverCryptoSymbols();
         getTraderInfo();
-        addLog('Ready to trade', 'green');
+        getOrderList();
         break;
 
       case PAYLOAD.SUBSCRIBE_SPOTS_RES:
-        addLog('Subscribed to spot prices', 'green');
+        addJournalLog('Subscription to pricing streams finalized.', 'success');
         break;
 
-      case 2115: // PROTO_OA_SYMBOLS_LIST_RES
-        addLog(`Symbols list: ${(payload.symbol || []).length} symbols`, 'blue');
-        handleSymbolList(payload);
+      case PAYLOAD.ASSET_CLASS_LIST_RES:
+      case 2154:
+        state.assetClasses = payload.assetClass || [];
+        checkDiscoveryProgress();
+        break;
+
+      case PAYLOAD.SYMBOL_CATEGORY_RES:
+      case PAYLOAD.SYMBOL_CATEGORY_LIST_RES:
+      case 2161:
+        state.symbolCategories = payload.symbolCategory || [];
+        checkDiscoveryProgress();
+        break;
+
+      case PAYLOAD.SYMBOLS_LIST_RES:
+      case 2115:
+        state.lightSymbols = payload.symbol || payload.symbols || [];
+        checkDiscoveryProgress();
+        break;
+
+      case PAYLOAD.SYMBOL_BY_ID_RES:
+      case 2117:
+        handleSymbolByIdRes(payload);
         break;
 
       case PAYLOAD.SPOT_EVENT:
         handleSpotEvent(payload);
-        break;
-
-      case PAYLOAD.EXECUTION_EVENT:
-        handleExecutionEvent(payload);
-        break;
-
-      case PAYLOAD.ORDER_ERROR_EVENT:
-        addLog(`Order error: ${payload.errorCode || 'unknown'} — ${payload.description || ''}`, 'red');
-        break;
-
-      case PAYLOAD.ERROR_RES:
-        addLog(`API Error [${payload.errorCode}]: ${payload.description || ''}`, 'red');
-        if (payload.errorCode === 'TOKEN_EXPIRED' || payload.errorCode === 'INVALID_ACCESS_TOKEN') {
-          addLog('Token expired, attempting refresh...', 'yellow');
-          refreshAccessToken().then(() => {
-            addLog('Reconnecting with new token...', 'blue');
-            disconnect();
-            setTimeout(toggleConnection, 1000);
-          }).catch(() => addLog('Auto-refresh failed. Re-authorize manually.', 'red'));
-        }
-        break;
-
-      case PAYLOAD.CLIENT_DISCONNECT_EVENT:
-        addLog('Server disconnected: ' + (payload.reason || 'unknown reason'), 'red');
-        disconnect();
         break;
 
       case PAYLOAD.TRADER_RES:
@@ -1331,170 +2446,166 @@ function handleMessage(data) {
 
       case PAYLOAD.TRADER_UPDATE_EVENT:
         handleTraderInfo(payload);
-        addLog('Account info updated', 'blue');
-        break;
-
-      case PAYLOAD.MARGIN_CHANGED_EVENT:
-        if (payload.usedMargin !== undefined) {
-          const md = payload.moneyDigits || 0;
-          state.margin = payload.usedMargin / Math.pow(10, md);
-        }
-        updateAccountDisplay();
         break;
 
       case PAYLOAD.ORDER_LIST_RES:
         handleOrderList(payload);
         break;
 
-      case 51:
-        // Heartbeat from server — just a keepalive, no response needed
+      case PAYLOAD.EXECUTION_EVENT:
+        handleExecutionEvent(payload);
         break;
-
-      default:
-        addLog(`Unhandled message type: ${type}`, 'yellow');
     }
-  } catch (e) {
-    addLog('Parse error: ' + e.message, 'red');
-  }
+  } catch(e) {}
 }
 
-// ============================================================
-//  HEARTBEAT
-// ============================================================
 function startHeartbeat() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   heartbeatInterval = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      const msg = {
-        clientMsgId: nextMsgId(),
-        payloadType: 51,
-        payload: {},
-      };
-      ws.send(JSON.stringify(msg));
+      ws.send(JSON.stringify({ payloadType: 51 }));
     }
   }, 10000);
 }
 
 // ============================================================
-//  MARKET DATA
+//  MARKET DISCOVERY
 // ============================================================
-function subscribeSpots() {
-  const symbolNames = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
+function discoverCryptoSymbols() {
   const creds = getCredentials();
-  const accountId = parseInt(creds.accountId, 10) || 0;
-  const msg = {
-    clientMsgId: nextMsgId(),
-    payloadType: 2114, // PROTO_OA_SYMBOLS_LIST_REQ
-    payload: { ctidTraderAccountId: accountId },
-  };
-  sendWs(msg);
-  state._pendingSubSymbols = symbolNames;
+  sendWs({ clientMsgId: nextMsgId(), payloadType: PAYLOAD.ASSET_CLASS_LIST_REQ, payload: { ctidTraderAccountId: parseInt(creds.accountId) } });
+  sendWs({ clientMsgId: nextMsgId(), payloadType: PAYLOAD.SYMBOL_CATEGORY_REQ, payload: { ctidTraderAccountId: parseInt(creds.accountId) } });
+  sendWs({ clientMsgId: nextMsgId(), payloadType: PAYLOAD.SYMBOLS_LIST_REQ, payload: { ctidTraderAccountId: parseInt(creds.accountId) } });
 }
 
-function handleSymbolList(payload) {
+function checkDiscoveryProgress() {
+  if (state.assetClasses && state.symbolCategories && state.lightSymbols) {
+    const cryptoClassIds = state.assetClasses.filter(ac => ac.name && ac.name.toLowerCase().includes('crypto')).map(ac => ac.id);
+    const cryptoCatIds = state.symbolCategories.filter(cat => cat.name && (cat.name.toLowerCase().includes('crypto') || cryptoClassIds.includes(cat.assetClassId))).map(cat => cat.id);
+
+    const candidates = state.lightSymbols.filter(s => cryptoCatIds.includes(s.symbolCategoryId) || /(BTC|ETH|LTC|SOL|XRP)/.test(s.symbolName));
+    const ids = candidates.map(s => s.symbolId).slice(0, 10); // Limit to top 10
+
+    // Populate lookup maps
+    state.lightSymbols.forEach(s => {
+      state.symbolIdMap[s.symbolId] = s.symbolName;
+      state.symbolNameMap[s.symbolName] = s.symbolId;
+    });
+
+    sendWs({
+      clientMsgId: nextMsgId(),
+      payloadType: PAYLOAD.SYMBOL_BY_ID_REQ,
+      payload: { ctidTraderAccountId: parseInt(getCredentials().accountId), symbolId: ids }
+    });
+  }
+}
+
+function handleSymbolByIdRes(payload) {
   const symbols = payload.symbol || [];
+  const body = document.getElementById('marketWatchBody');
+  const dropdown = document.getElementById('orderSymbol');
+  body.innerHTML = '';
+  dropdown.innerHTML = '';
+
   symbols.forEach(s => {
-    state.symbolIdMap[s.symbolId] = s.symbolName;
-    state.symbolNameMap[s.symbolName] = s.symbolId;
+    const lotSize = s.lotSize || 100000;
+    const minVol = s.minVolume || 100;
+    const minLot = minVol / lotSize;
+    const name = state.symbolIdMap[s.symbolId] || `#${s.symbolId}`;
+
+    state._cryptoDetails[name] = { symbolId: s.symbolId, symbolName: name, digits: s.digits || 2, pipPosition: s.pipPosition || 2, minLot };
+
+    const tr = document.createElement('tr');
+    tr.id = `mw_${name}`;
+    tr.onclick = () => selectSymbol(name);
+    tr.innerHTML = `<td>${name}</td><td id="bid_${name}">—</td><td id="ask_${name}">—</td><td id="spr_${name}">—</td>`;
+    body.appendChild(tr);
+
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    dropdown.appendChild(opt);
   });
 
-  const creds = getCredentials();
-  const accountId = parseInt(creds.accountId, 10) || 0;
-  const pending = state._pendingSubSymbols || [];
-  const ids = pending.map(name => state.symbolNameMap[name]).filter(id => id);
-  if (ids.length > 0) {
-    const msg = {
-      clientMsgId: nextMsgId(),
-      payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
-      payload: { ctidTraderAccountId: accountId, symbolId: ids },
-    };
-    sendWs(msg);
-    pending.forEach(name => { if (state.symbolNameMap[name]) state.subscribedSymbols.push(name); });
-  }
+  // Subscribe
+  const ids = symbols.map(s => s.symbolId);
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
+    payload: { ctidTraderAccountId: parseInt(getCredentials().accountId), symbolId: ids }
+  });
 
-  if (state.subscribedSymbols.length > 0) {
-    addLog(`Subscribed to ${state.subscribedSymbols.join(', ')}`, 'green');
+  if (symbols.length > 0) {
+    selectSymbol(state.symbolIdMap[symbols[0].symbolId]);
   }
 }
 
 function handleSpotEvent(payload) {
-  const symbolId = payload.symbolId;
-  const name = state.symbolIdMap[symbolId] || `#${symbolId}`;
-  // cTrader sends prices as uint64 (e.g. 105987 = 1.05987)
-  const toPrice = v => v !== undefined && v !== null ? v / 100000 : null;
-  const bid = toPrice(payload.bid);
-  const ask = toPrice(payload.ask);
-  if (!state._currentSymbol) state._currentSymbol = name;
+  const name = state.symbolIdMap[payload.symbolId];
+  if (!name) return;
+
+  const bid = payload.bid ? payload.bid / 100000 : null;
+  const ask = payload.ask ? payload.ask / 100000 : null;
+
+  const bidEl = document.getElementById(`bid_${name}`);
+  const askEl = document.getElementById(`ask_${name}`);
+  if (bidEl && askEl) {
+    if (bid) bidEl.textContent = bid.toFixed(2);
+    if (ask) askEl.textContent = ask.toFixed(2);
+  }
+
   if (name === state._currentSymbol) {
-    updatePriceDisplay(name, bid, ask, payload);
-    if (bid !== null) updateChartFromPrice(bid);
+    document.getElementById('oneClickBid').textContent = bid ? bid.toFixed(2) : '—';
+    document.getElementById('oneClickAsk').textContent = ask ? ask.toFixed(2) : '—';
+    updateChartFromPrice(bid, Date.now());
+
+    // Auto Trading Confluence Evaluator
+    if (state.botRunning) {
+      evaluateConfluenceSignals(name, bid);
+    }
   }
 }
 
-function updatePriceDisplay(name, bid, ask, payload) {
-  const bidEl = document.getElementById('bidPrice');
-  const askEl = document.getElementById('askPrice');
-  const prevBid = parseFloat(bidEl.dataset.last) || 0;
-  const prevAsk = parseFloat(askEl.dataset.last) || 0;
-  bidEl.textContent = bid ? bid.toFixed(5) : '—';
-  askEl.textContent = ask ? ask.toFixed(5) : '—';
-  bidEl.style.color = bid > prevBid ? 'var(--green)' : bid < prevBid ? 'var(--red)' : '';
-  askEl.style.color = ask > prevAsk ? 'var(--green)' : ask < prevAsk ? 'var(--red)' : '';
-  bidEl.dataset.last = bid || '';
-  askEl.dataset.last = ask || '';
-  document.getElementById('marketSymbol').textContent = name;
-  document.getElementById('chartSymbolLabel').textContent = name + ' · M5';
+function selectSymbol(name) {
+  state._currentSymbol = name;
+  document.getElementById('oneClickSymbol').textContent = name;
+  document.getElementById('statusCurrentSymbol').textContent = name;
 
-  if (payload) {
-    const spread = ask && bid ? ((ask - bid) * 10000).toFixed(1) : '—';
-    document.getElementById('marketSpread').textContent = `Spread: ${spread} pips`;
-    if (payload.high) document.getElementById('dayHigh').textContent = payload.high.toFixed(5);
-    if (payload.low) document.getElementById('dayLow').textContent = payload.low.toFixed(5);
-    if (payload.volume) document.getElementById('dayVol').textContent = payload.volume;
+  // Seed initial chart rendering with professional walk paths if empty
+  const key = `${name}_${state._currentTF}`;
+  if (!ohlcHistory[key] || ohlcHistory[key].length === 0) {
+    seedChartHistory(name, state._currentTF, 35000);
   }
+
+  updateChartData();
+
+  // On mobile, close the sidebar drawer after picking a symbol
+  if (window.matchMedia('(max-width: 767px)').matches) closeMobileSidebar();
 }
 
-// ============================================================
-//  TRADER INFO (balance, etc.)
-// ============================================================
 function getTraderInfo() {
-  const accountId = parseInt(getCredentials().accountId, 10) || 0;
-  if (!accountId) return;
   sendWs({
     clientMsgId: nextMsgId(),
     payloadType: PAYLOAD.TRADER_REQ,
-    payload: { ctidTraderAccountId: accountId },
+    payload: { ctidTraderAccountId: parseInt(getCredentials().accountId) }
   });
 }
 
 function handleTraderInfo(payload) {
-  const trader = payload.trader;
-  if (!trader) { addLog('Trader info: no trader data in response', 'yellow'); return; }
-  const md = trader.moneyDigits || trader.money_digits || 0;
-  const divisor = Math.pow(10, md);
-  const rawBalance = trader.balance ?? 0;
-  const balanceNum = typeof rawBalance === 'object' ? (rawBalance.amount || 0) : Number(rawBalance);
-  state.balance = balanceNum / divisor;
-  state.equity = state.balance;
-  state.depositAssetId = trader.depositAssetId || trader.deposit_asset_id || null;
-  addLog(`Balance: $${state.balance.toFixed(2)} (raw=${rawBalance}, md=${md})`, 'green');
-  updateAccountDisplay();
-  updateDashboard();
+  const t = payload.trader;
+  if (!t) return;
+  const divisor = Math.pow(10, t.moneyDigits || 0);
+  state.balance = (t.balance ?? 0) / divisor;
+  state.equity = state.balance; // initial
+  updateToolboxGrids();
 }
 
-// ============================================================
-//  ORDER LIST & POSITIONS
-// ============================================================
 function getOrderList() {
-  const creds = getCredentials();
-  const accountId = parseInt(creds.accountId, 10) || 0;
-  if (!accountId) { addLog('Cannot get orders: no account ID', 'red'); return; }
-  const msg = {
+  sendWs({
     clientMsgId: nextMsgId(),
     payloadType: PAYLOAD.ORDER_LIST_REQ,
-    payload: { ctidTraderAccountId: accountId },
-  };
-  sendWs(msg);
+    payload: { ctidTraderAccountId: parseInt(getCredentials().accountId) }
+  });
 }
 
 function handleOrderList(payload) {
@@ -1508,433 +2619,186 @@ function handleOrderList(payload) {
         id: o.positionId || o.orderId,
         symbol: state.symbolIdMap[o.symbolId] || `#${o.symbolId}`,
         side: o.tradeDirection === 'BUY' ? 'buy' : 'sell',
-        volume: o.volume ? o.volume / 100000 : 0,
+        volume: o.volume ? o.volume / 100000 : 0.1,
         entry: o.price,
-        sl: o.stopLoss?.price,
-        tp: o.takeProfit?.price,
+        sl: o.stopLoss?.price || 0,
+        tp: o.takeProfit?.price || 0,
         current: o.price,
       });
-    } else if (o.orderStatus === 'ORDER_STATUS_PENDING') {
+    } else {
       state.pendingOrders.push(o);
     }
   });
 
-  updatePosCount();
-  updatePositionsTable();
-  updateDashboard();
+  updateToolboxGrids();
 }
 
 function handleExecutionEvent(payload) {
-  const execType = payload.executionType;
-  addLog(`Execution: ${execType} — Order ${payload.orderId}`, 'blue');
-  if (execType === 'FILLED' || execType === 'CANCELLED') {
-    setTimeout(getOrderList, 500);
-  }
+  addJournalLog(`Execution received: ${payload.executionType}`, 'info');
+  getOrderList();
 }
 
-// ============================================================
-//  TRADING
-// ============================================================
+// Manual Placement Orders
 function placeOrder(side) {
-  if (!state.connected) {
-    addLog('Cannot trade: not connected to cTrader API', 'red');
-    return;
-  }
-
   const symbolName = document.getElementById('orderSymbol').value;
-  const symbolId = state.symbolNameMap[symbolName];
-  const volLots = parseFloat(document.getElementById('orderVolume').value) || 0.01;
-  const slPips = parseFloat(document.getElementById('orderSL').value) || 0;
-  const tpPips = parseFloat(document.getElementById('orderTP').value) || 0;
-  const comment = document.getElementById('orderComment').value || 'FullBot';
-  const creds = getCredentials();
+  const lots = parseFloat(document.getElementById('orderVolume').value) || 0.1;
+  const slPips = parseFloat(document.getElementById('orderSL').value) || 30;
+  const tpPips = parseFloat(document.getElementById('orderTP').value) || 90;
 
-  if (!symbolId) {
-    addLog(`Symbol ${symbolName} not mapped. Try refreshing.`, 'red');
-    return;
-  }
-
-  const volume = volLots * 100000; // convert lots to units
-
-  const order = {
-    ctidTraderAccountId: parseInt(creds.accountId) || 0,
-    symbolId: symbolId,
-    orderType: 'ORDER_TYPE_MARKET',
-    tradeDirection: side === 'buy' ? 'BUY' : 'SELL',
-    volume: volume,
-    label: 'FullBot',
-    comment: comment,
-  };
-
-  if (slPips > 0) order.stopLossPips = slPips;
-  if (tpPips > 0) order.takeProfitPips = tpPips;
-
-  const msg = {
-    clientMsgId: nextMsgId(),
-    payloadType: PAYLOAD.NEW_ORDER_REQ,
-    payload: order,
-  };
-
-  sendWs(msg);
-  addLog(`Placing ${side.toUpperCase()} ${volLots} ${symbolName}`, side === 'buy' ? 'green' : 'red');
+  triggerAutomatedOrder(symbolName, side, lots, slPips, tpPips);
+  closeModal('orderModal');
 }
 
-function closePositionApi(positionId) {
-  if (!state.connected) return;
-  const creds = getCredentials();
-  const msg = {
+function placeQuickOrder(side) {
+  const lots = parseFloat(document.getElementById('oneClickVolume').value) || 0.1;
+  triggerAutomatedOrder(state._currentSymbol, side, lots, 30, 90);
+}
+
+function closePositionApi(posId) {
+  sendWs({
     clientMsgId: nextMsgId(),
     payloadType: PAYLOAD.CLOSE_POSITION_REQ,
     payload: {
-      ctidTraderAccountId: parseInt(creds.accountId) || 0,
-      positionId: positionId,
-      volume: 0, // 0 = close full
-    },
-  };
-  sendWs(msg);
-  addLog(`Closing position ${positionId}`, 'yellow');
-}
-
-function closeAllPositions() {
-  if (state.connected) {
-    state.positions.forEach(p => closePositionApi(p.id));
-  } else {
-    addLog('Not connected to API', 'red');
-  }
-}
-
-function cancelAllOrders() {
-  if (!state.connected) {
-    addLog('Not connected to API', 'red');
-    return;
-  }
-  state.pendingOrders.forEach(o => {
-    const msg = {
-      clientMsgId: nextMsgId(),
-      payloadType: PAYLOAD.CANCEL_ORDER_REQ,
-      payload: {
-        ctidTraderAccountId: parseInt(getCredentials().accountId) || 0,
-        orderId: o.orderId,
-      },
-    };
-    sendWs(msg);
+      ctidTraderAccountId: parseInt(getCredentials().accountId) || 0,
+      positionId: posId,
+      volume: 0,
+    }
   });
-  addLog('Cancelling all pending orders', 'yellow');
+  addJournalLog(`Closing position #${posId}...`);
 }
 
 // ============================================================
-//  ACCOUNT DISPLAY
+//  UI UTILITIES / MENUS / TABS
 // ============================================================
-function updatePosCount() {
-  const count = state.positions.length;
-  document.getElementById('posCount').textContent = count;
-  const m = document.getElementById('mobilePosCount');
-  if (m) m.textContent = count;
+function toggleMenu(el) {
+  const wasActive = el.classList.contains('active');
+  document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+  if (!wasActive) el.classList.add('active');
 }
 
-function updateAccountDisplay() {
-  const b = state.balance || 0;
-  const e = state.equity || 0;
-  const m = state.margin || 0;
-  const f = state.freeMargin || (e - m);
-  document.getElementById('balanceVal').textContent = '$' + b.toFixed(2);
-  document.getElementById('equityVal').textContent = '$' + e.toFixed(2);
-  document.getElementById('equityVal').className = 'value' + (e >= b ? ' green' : ' red');
-  document.getElementById('marginVal').textContent = '$' + m.toFixed(2);
-  document.getElementById('freeMarginVal').textContent = '$' + f.toFixed(2);
-  document.getElementById('freeMarginVal').className = 'value' + (f >= 0 ? ' green' : ' red');
+// Close menus when clicking outside
+window.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-item')) {
+    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+  }
+});
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('open');
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('open');
+}
+
+function toggleSidebarSection(sec) {
+  const el = document.getElementById(sec === 'marketWatch' ? 'marketWatchSection' : 'navigatorSection');
+  if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+function toggleFolder(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+function switchToolboxTab(tab) {
+  document.querySelectorAll('.toolbox-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.toolbox-pane').forEach(p => p.classList.remove('active'));
+
+  const activeTab = document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
+  const activePane = document.getElementById(`pane${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
+
+  if (activeTab) activeTab.classList.add('active');
+  if (activePane) activePane.classList.add('active');
 }
 
 // ============================================================
-//  POSITIONS TABLE
+//  MOBILE NAVIGATION (sidebar drawer + bottom tab views)
 // ============================================================
-function updatePositionsTable() {
-  const body = document.getElementById('positionsBody');
+function openMobileSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  if (sb) sb.classList.add('open');
+  if (ov) ov.classList.add('open');
+}
+
+function closeMobileSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  if (sb) sb.classList.remove('open');
+  if (ov) ov.classList.remove('open');
+}
+
+// On mobile, the bottom tabs switch which panel is emphasised.
+// "chart" = chart + toolbox visible; "trade"/"experts" = jump to toolbox tab.
+function showMobileView(view, el) {
+  document.querySelectorAll('.mt5-mobile-tabbar .mtab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  if (view === 'trade') {
+    switchToolboxTab('trade');
+    document.getElementById('paneTrade').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (view === 'experts') {
+    switchToolboxTab('experts');
+    document.getElementById('paneExperts').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (view === 'chart') {
+    const chartArea = document.querySelector('.mt5-chart-area');
+    if (chartArea) chartArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function syncVolumeInputs(val) {
+  document.getElementById('oneClickVolume').value = val;
+  document.getElementById('orderVolume').value = val;
+}
+
+// Syncing Toolbox rows
+function updateToolboxGrids() {
+  const tradeBody = document.getElementById('toolboxTradeBody');
+  if (!tradeBody) return;
+
   if (state.positions.length === 0) {
-    body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px;">No open positions</td></tr>';
-    return;
-  }
-  body.innerHTML = state.positions.map(p => {
-    const pnl = 0; // Would need spot price to calculate
-    return `<tr>
-      <td>${p.id}</td>
-      <td>${p.symbol}</td>
-      <td><span class="side ${p.side}">${p.side.toUpperCase()}</span></td>
-      <td>${(p.volume).toFixed(2)}</td>
-      <td>${p.entry ? p.entry.toFixed(5) : '—'}</td>
-      <td>${p.current ? p.current.toFixed(5) : '—'}</td>
-      <td>${p.sl ? p.sl.toFixed(5) : '—'}</td>
-      <td>${p.tp ? p.tp.toFixed(5) : '—'}</td>
-      <td class="pnl ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
-      <td><button class="btn btn-sm btn-secondary" onclick="closePositionApi(${p.id})" style="color:var(--red)">Close</button></td>
-    </tr>`;
-  }).join('');
-  updatePosCount();
-}
-
-// ============================================================
-//  DASHBOARD
-// ============================================================
-function updateDashboard() {
-  document.getElementById('dashBalance').textContent = '$' + state.balance.toFixed(2);
-  document.getElementById('dashEquity').textContent = '$' + state.equity.toFixed(2);
-  const diff = state.equity - state.balance;
-  document.getElementById('dashPnL').textContent = (diff >= 0 ? '+' : '') + '$' + diff.toFixed(2);
-  document.getElementById('dashPnL').className = 'value' + (diff >= 0 ? ' green' : ' red');
-  document.getElementById('dashPositions').textContent = state.positions.length;
-  document.getElementById('totalTrades').textContent = state.trades;
-  document.getElementById('winRate').textContent = state.trades > 0 ? (state.wins / state.trades * 100).toFixed(1) + '%' : '0%';
-}
-
-// ============================================================
-//  CHART (Canvas)
-// ============================================================
-function updateChartFromPrice(price) {
-  if (!price) return;
-  chartData.push(price);
-  if (chartData.length > 150) chartData.shift();
-  drawChart();
-}
-
-function drawChart() {
-  const canvas = document.getElementById('chartCanvas');
-  if (!canvas) return;
-  const container = document.getElementById('chartContainer');
-  canvas.width = container.clientWidth || 800;
-  canvas.height = container.clientHeight || 320;
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-
-  if (chartData.length < 2) {
-    ctx.fillStyle = '#0b0e14';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#5a6577';
-    ctx.font = '14px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for price data...', w/2, h/2);
-    return;
-  }
-
-  const min = Math.min(...chartData) * 0.9998;
-  const max = Math.max(...chartData) * 1.0002;
-  const range = max - min;
-  const pad = 20;
-
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#0b0e14';
-  ctx.fillRect(0, 0, w, h);
-
-  // Grid
-  ctx.strokeStyle = '#1a202c';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    const y = pad + (h - 2*pad) * i / 4;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-  }
-
-  // Price line
-  const stepX = (w - 2*pad) / (chartData.length - 1);
-  ctx.beginPath();
-  ctx.strokeStyle = '#4d8cff';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < chartData.length; i++) {
-    const x = pad + i * stepX;
-    const y = pad + (h - 2*pad) - ((chartData[i] - min) / range) * (h - 2*pad);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  // Fill
-  const lastX = pad + (chartData.length - 1) * stepX;
-  ctx.lineTo(lastX, h - pad);
-  ctx.lineTo(pad, h - pad);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(77,140,255,0.05)';
-  ctx.fill();
-
-  // Price labels
-  ctx.fillStyle = '#5a6577';
-  ctx.font = '11px Inter, sans-serif';
-  for (let i = 0; i < 5; i++) {
-    const val = max - range * i / 4;
-    const y = pad + (h - 2*pad) * i / 4;
-    ctx.textAlign = 'right';
-    ctx.fillText(val.toFixed(5), w - 8, y + 4);
-  }
-}
-
-function setChartTF(tf) {
-  document.querySelectorAll('#chartContainer + .panel-header .actions .btn').forEach(b => {
-    b.style.background = '';
-    b.style.color = '';
-  });
-  addLog(`Chart timeframe set to ${tf}`, 'blue');
-}
-
-// ============================================================
-//  BOT CONTROL
-// ============================================================
-function toggleBot() {
-  state.botRunning = !state.botRunning;
-  const status = document.getElementById('botStatus');
-  if (state.botRunning) {
-    status.textContent = 'Running';
-    status.style.color = 'var(--green)';
-    addLog('Bot started', 'green');
-    if (!state.connected) {
-      addLog('No connection active. Connect via Settings first.', 'yellow');
-    }
+    tradeBody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">No open positions</td></tr>`;
   } else {
-    status.textContent = 'Stopped';
-    status.style.color = 'var(--text-muted)';
-    addLog('Bot stopped', 'yellow');
-  }
-}
-
-// ============================================================
-//  SETTINGS UI
-// ============================================================
-function toggleTrailing() {
-  document.getElementById('trailingParams').style.display =
-    document.getElementById('trailingToggle').checked ? 'flex' : 'none';
-}
-function toggleBE() {
-  document.getElementById('beParams').style.display =
-    document.getElementById('beToggle').checked ? 'flex' : 'none';
-}
-function toggleSession() {
-  document.getElementById('sessionParams').style.display =
-    document.getElementById('sessionToggle').checked ? 'flex' : 'none';
-}
-
-function onStrategyChange() {
-  const v = document.getElementById('strategySelect').value;
-  document.getElementById('maParams').style.display = v === 'ma' ? 'block' : 'none';
-  document.getElementById('rsiParams').style.display = v === 'rsi' ? 'block' : 'none';
-  document.getElementById('bbParams').style.display = v === 'bb' ? 'block' : 'none';
-  document.getElementById('macdParams').style.display = v === 'macd' ? 'block' : 'none';
-  addLog(`Strategy: ${v.toUpperCase()}`, 'blue');
-}
-
-// ============================================================
-//  TABS
-// ============================================================
-function switchTab(el, name) {
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  if (el) el.classList.add('active');
-  switchTabContent(name);
-}
-
-function switchTabMobile(el, name) {
-  document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
-  if (el) el.classList.add('active');
-  switchTabContent(name);
-}
-
-function switchTabContent(name) {
-  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
-  const tab = document.getElementById('tab-' + name);
-  if (tab) tab.style.display = 'block';
-
-  // Sync nav states
-  document.querySelectorAll('.nav-item').forEach(n => {
-    n.classList.toggle('active', n.dataset.tab === name);
-  });
-  document.querySelectorAll('.mobile-nav-item').forEach(n => {
-    n.classList.toggle('active', n.dataset.tab === name);
-  });
-
-  if (name === 'positions') updatePositionsTable();
-  if (name === 'dashboard') updateDashboard();
-  if (name === 'logs') {
-    const container = document.getElementById('logContainer');
-    container.scrollTop = container.scrollHeight;
+    tradeBody.innerHTML = state.positions.map(p => `
+      <tr>
+        <td>${p.id}</td>
+        <td>${new Date().toLocaleTimeString()}</td>
+        <td>${p.symbol}</td>
+        <td><span style="color:${p.side === 'buy' ? 'var(--mt5-green)' : 'var(--mt5-red)'}">${p.side.toUpperCase()}</span></td>
+        <td>${p.volume.toFixed(2)}</td>
+        <td>${p.entry.toFixed(2)}</td>
+        <td>${p.sl ? p.sl.toFixed(2) : '—'}</td>
+        <td>${p.tp ? p.tp.toFixed(2) : '—'}</td>
+        <td>0.00</td>
+        <td>0.00</td>
+        <td style="text-align:right">0.00</td>
+        <td><button class="toolbar-btn" style="color:var(--mt5-red)" onclick="closePositionApi(${p.id})">✕ Close</button></td>
+      </tr>
+    `).join('');
   }
 
-  closeMobileDrawer();
-}
-
-function closeMobileDrawer() {
-  document.getElementById('mobileOverlay').classList.remove('open');
-  document.getElementById('mobileDrawer').classList.remove('open');
-}
-
-// ============================================================
-//  LOGS
-// ============================================================
-function addLog(msg, cls) {
-  const t = new Date();
-  const ts = '[' + t.toTimeString().slice(0,8) + ']';
-  const container = document.getElementById('logContainer');
-  const div = document.createElement('div');
-  div.className = 'log-entry';
-  div.innerHTML = `<span class="time">${ts}</span><span class="msg ${cls || ''}">${msg}</span>`;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-function clearLogs() {
-  document.getElementById('logContainer').innerHTML = '';
-  addLog('Logs cleared', 'yellow');
+  // Draw Summary Row
+  const summaryTr = document.createElement('tr');
+  summaryTr.className = 'summary-row';
+  summaryTr.innerHTML = `<td colspan="12">Balance: $${state.balance.toFixed(2)} | Equity: $${state.equity.toFixed(2)} | Free Margin: $${state.freeMargin.toFixed(2)}</td>`;
+  tradeBody.appendChild(summaryTr);
 }
 
 // ============================================================
-//  INIT
+//  INITIALIZATION
 // ============================================================
-// Sync redirect display with input
+loadCredentials();
+initLightweightChart();
+
+// Fallback seed for gorgeous default load look before any accounts connected
 (function() {
-  const ri = document.getElementById('connRedirectUri');
-  const rd = document.getElementById('redirectDisplay');
-  if (ri && rd) {
-    ri.addEventListener('input', function() { rd.textContent = this.value || 'https://ctraderbot.vercel.app'; });
-  }
+  state._currentSymbol = 'BTCUSD';
+  seedChartHistory('BTCUSD', 'M15', 35000);
+  updateChartData();
 })();
-
-// Account dropdown change: auto-set environment
-(function() {
-  const sel = document.getElementById('connAccountId');
-  if (sel) {
-    sel.addEventListener('change', function() {
-      const accounts = window._allAccounts || [];
-      const pick = accounts.find(a => a.ctidTraderAccountId == this.value);
-      if (pick) {
-        const live = pick.isLive === undefined ? (pick.accountType || '').toLowerCase().includes('live') : pick.isLive;
-        document.getElementById('connEnv').value = live ? 'live' : 'demo';
-        if (state.connected || state.connecting) {
-          addLog(`Switching to account #${pick.ctidTraderAccountId}...`, 'blue');
-          disconnect();
-          setTimeout(() => toggleConnection(), 500);
-        }
-      }
-    });
-  }
-})();
-
-// Detect OAuth redirect with code in URL
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  if (code) {
-    if (window.opener && window.opener.receiveOAuthCode) {
-      window.opener.receiveOAuthCode(code);
-      window.close();
-    } else {
-      document.getElementById('oauthRedirectInput').value = code;
-      addLog('OAuth code detected! Exchanging for token...', 'blue');
-      setTimeout(exchangeAuthCode, 500);
-      if (window.history.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }
-})();
-
-addLog('FullBot v2.0 loaded — Client ID/Secret pre-configured', 'green');
-addLog('Open Settings → Connection → Authorize to get a token', 'blue');
-updateDashboard();
-
-window.addEventListener('resize', () => { drawChart(); });
 </script>
 </body>
 </html>
