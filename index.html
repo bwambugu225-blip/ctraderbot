@@ -1435,6 +1435,8 @@ function handleSymbolList(payload) {
     state.symbolNameMap[s.symbolName] = s.symbolId;
   });
 
+  const creds = getCredentials();
+  const accountId = parseInt(creds.accountId, 10) || 0;
   const pending = state._pendingSubSymbols || [];
   pending.forEach(name => {
     const id = state.symbolNameMap[name];
@@ -1442,7 +1444,7 @@ function handleSymbolList(payload) {
       const msg = {
         clientMsgId: nextMsgId(),
         payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
-        payload: { symbolId: id },
+        payload: { ctidTraderAccountId: accountId, symbolId: id },
       };
       sendWs(msg);
       state.subscribedSymbols.push(name);
