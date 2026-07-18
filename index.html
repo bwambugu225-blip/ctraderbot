@@ -342,6 +342,7 @@ input:focus, select:focus { border-color:var(--mt5-accent); }
       <button class="toolbar-btn tf-btn active" id="tfM15" onclick="setChartTF('M15')">M15</button>
       <button class="toolbar-btn tf-btn" id="tfH1" onclick="setChartTF('H1')">H1</button>
       <button class="toolbar-btn tf-btn" id="tfD1" onclick="setChartTF('D1')">D1</button>
+      <button class="toolbar-btn" style="margin-left:8px" onclick="loadHistory(state._currentSymbol)" title="Import real OHLC (may not work on all demo accounts)">⟳ Load History</button>
     </div>
   </div>
 
@@ -414,6 +415,7 @@ input:focus, select:focus { border-color:var(--mt5-accent); }
           <div class="toolbox-tab" id="tabHistory" onclick="switchToolboxTab('history')">📋 History</div>
           <div class="toolbox-tab" id="tabExperts" onclick="switchToolboxTab('experts')">🧠 Experts</div>
           <div class="toolbox-tab" id="tabJournal" onclick="switchToolboxTab('journal')">📝 Journal</div>
+          <button class="toolbar-btn" style="margin-left:auto;font-size:11px;padding:2px 8px" onclick="copyLogs()">⧉ Copy Logs</button>
         </div>
         <div class="toolbox-content">
           <div class="toolbox-pane active" id="paneTrade">
@@ -674,8 +676,8 @@ function setChartTF(tf){
   state._currentTF=tf;
   document.getElementById('statusCurrentTf').textContent=tf;
   ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
-  // Reset bars for the new timeframe and reload history
-  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); loadHistory(state._currentSymbol); }
+  // Reset bars for the new timeframe (history builds live from the spot stream)
+  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); }
   addJournalLog('Timeframe: '+tf,'info');
 }
 function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
@@ -804,7 +806,17 @@ function saveRiskSettings(){
   eaRiskSettings.beLock=parseFloat(document.getElementById('beLock').value)||2;
   addJournalLog('EA risk settings saved.','success');addExpertLog('Risk profiles updated.','info');closeModal('riskModal');
 }
-function onMmTypeChange(v){document.getElementById('mmRiskPct').disabled=(v==='fixed');document.getElementById('mmFixedVol').disabled=(v==='risk');}
+function copyLogs(){
+  try{
+    const j=document.getElementById('journalLogContainer'),e=document.getElementById('expertLogContainer');
+    const jt=j?Array.from(j.querySelectorAll('.log-line')).map(d=>d.textContent).join('\n'):'';
+    const et=e?Array.from(e.querySelectorAll('.log-line')).map(d=>d.textContent).join('\n'):'';
+    const txt='=== JOURNAL ===\n'+jt+'\n\n=== EXPERTS ===\n'+et;
+    navigator.clipboard.writeText(txt).then(()=>addJournalLog('Logs copied to clipboard.','green')).catch(()=>{
+      const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);addJournalLog('Logs copied to clipboard.','green');
+    });
+  }catch(e){addJournalLog('Copy failed: '+e.message,'red');}
+}
 
 // ============================================================
 //  LOGGING
@@ -913,7 +925,7 @@ function handleMessage(data){
       case PAYLOAD.EXECUTION_EVENT: handleExecutionEvent(payload);break;
       case PAYLOAD.ORDER_ERROR_EVENT: addJournalLog('Order error: '+(payload.errorCode||'')+' — '+(payload.description||''),'red');break;
       case PAYLOAD.ERROR_RES: addJournalLog('API Error ['+payload.errorCode+']: '+(payload.description||''),'red');if(payload.errorCode==='TOKEN_EXPIRED'||payload.errorCode==='INVALID_ACCESS_TOKEN'){addJournalLog('Refreshing...','yellow');refreshAccessToken().then(()=>{disconnect();setTimeout(toggleConnection,1000);}).catch(()=>addJournalLog('Refresh failed.','red'));}break;
-      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server disconnected.','red');disconnect();break;
+      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server sent disconnect. Reconnecting...','red');_manualClose=false;if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;setTimeout(autoReconnect,3000);break;
       case 51: break;
       default: break;
     }
@@ -983,18 +995,17 @@ function selectSymbol(name){
   document.getElementById('statusCurrentSymbol').textContent=name;
   ohlcHistory[name+'_'+state._currentTF]=[];
   updateChartData();
-  loadHistory(name);
   if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
 }
 
-// Import real historical OHLC by requesting tick data and aggregating into bars
+// Request real historical OHLC via tick data (best-effort; never force-disconnects)
 function loadHistory(name){
   const sid=state.symbolNameMap[name]; if(!sid||!state.connected) return;
   const now=Date.now(), from=now-1000*60*60*24*7; // last 7 days
   addJournalLog('Loading history for '+name+'...','blue');
   sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_TICK_DATA_REQ,payload:{
     ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
-    symbolId:sid, fromTimestamp:from, toTimestamp:now, maxDepth:500, type:'TICKS'
+    symbolId:sid, fromTimestamp:from, toTimestamp:now, tickDataMaxDepth:500, type:'TICKS'
   }});
 }
 function buildOrder(sn,side,vol,sl,tp,cm){
