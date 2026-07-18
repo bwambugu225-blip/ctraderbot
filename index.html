@@ -2113,6 +2113,11 @@ function clearLogs() {
       if (pick) {
         const live = pick.isLive === undefined ? (pick.accountType || '').toLowerCase().includes('live') : pick.isLive;
         document.getElementById('connEnv').value = live ? 'live' : 'demo';
+        if (state.connected || state.connecting) {
+          addLog(`Switching to account #${pick.ctidTraderAccountId}...`, 'blue');
+          disconnect();
+          setTimeout(() => toggleConnection(), 500);
+        }
       }
     });
   }
