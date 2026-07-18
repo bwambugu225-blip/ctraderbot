@@ -716,14 +716,15 @@ function updateChartData(){
 }
 // Aggregate imported tick data into OHLC bars for the current timeframe
 function handleTickData(payload){
-  const ticks=payload.tickData||[];
+  const ticks=payload.tickData||payload.ticks||payload.data||[];
   if(!ticks.length){addJournalLog('No history ticks returned.','yellow');return;}
   const bs=getTfSeconds(state._currentTF);
   const name=state._currentSymbol, key=name+'_'+state._currentTF;
   const bars={};
   ticks.forEach(t=>{
-    const ts=t.timestamp/1000, bt=Math.floor(ts/bs)*bs;
-    const bid=(t.bid||0)/100000, ask=(t.ask||0)/100000, p=(bid+ask)/2||bid||ask;
+    const ts=(t.timestamp||t.time||0)/1000; if(!ts) return;
+    const bt=Math.floor(ts/bs)*bs;
+    const bid=(t.bid||0)/100000, ask=(t.ask||0)/100000, p=(bid+ask)/2||bid||ask||(t.last||0)/100000;
     if(!p) return;
     if(!bars[bt]) bars[bt]={time:bt,open:p,high:p,low:p,close:p};
     const b=bars[bt];
@@ -731,9 +732,18 @@ function handleTickData(payload){
   });
   const arr=Object.values(bars).sort((a,b)=>a.time-b.time);
   if(arr.length){
+    // Preserve any live bar already built after import started
+    const existing=ohlcHistory[key];
+    if(Array.isArray(existing)&&existing.length){
+      const lastImp=arr[arr.length-1].time;
+      existing.forEach(b=>{ if(b.time>=lastImp) arr.push(b); });
+      arr.sort((a,b)=>a.time-b.time);
+    }
     ohlcHistory[key]=arr;
     addJournalLog('Imported '+arr.length+' historical bars for '+name,'green');
     updateChartData();
+  } else {
+    addJournalLog('History ticks present but no bars formed.','yellow');
   }
 }
 function calcEMA(d,p){const e=[];if(!d.length)return e;const k=2/(p+1);let pe=d[0].close;e.push({time:d[0].time,value:pe});for(let i=1;i<d.length;i++){const v=d[i].close*k+pe*(1-k);e.push({time:d[i].time,value:v});pe=v;}return e;}
@@ -774,8 +784,8 @@ function evaluateSignals(name,price){
 }
 function triggerAutoOrder(name,side,lots,sl,tp){
   if(!state.connected){addExpertLog('Order failed: disconnected.','error');return;}
-  const id=state.symbolNameMap[name];if(!id)return;
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:id,orderType:'MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:lots*100000,label:'cTraderEA',comment:'EA',stopLossPips:sl,takeProfitPips:tp,accessToken:getCredentials().accessToken}});
+  const o=buildOrder(name,side,lots,sl,tp,'cTraderEA');if(!o)return;
+  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});
   addExpertLog('PLACED '+side.toUpperCase()+' '+name+' lots '+lots.toFixed(2),'success');
 }
 function saveRiskSettings(){
@@ -822,15 +832,16 @@ function exchangeAuthCode(){
   fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:code,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})})
   .then(r=>r.json()).then(d=>{
     if(d.errorCode){addJournalLog('OAuth error: '+(d.description||d.errorCode),'red');return;}
-    if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;addJournalLog('✓ Token obtained.','green');if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);_oauthCode=null;document.getElementById('oauthRedirectInput').value='';addJournalLog('Auto-connecting...','blue');setTimeout(toggleConnection,500);}
+    if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;localStorage.setItem('ctrader_access',d.accessToken);addJournalLog('✓ Token obtained.','green');if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);_oauthCode=null;document.getElementById('oauthRedirectInput').value='';addJournalLog('Auto-connecting...','blue');setTimeout(toggleConnection,500);}
     else addJournalLog('Unexpected: '+JSON.stringify(d),'yellow');
   }).catch(e=>addJournalLog('Token exchange failed: '+e.message,'red')).finally(()=>{_oauthCode=null;});
 }
-function refreshAccessToken(){const r=localStorage.getItem('ctrader_refresh');if(!r){addJournalLog('No refresh token.','red');return Promise.reject();}const ri=document.getElementById('connRedirectUri').value.trim();return fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:r,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})}).then(r=>r.json()).then(d=>{if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);addJournalLog('Token refreshed.','green');return d.accessToken;}addJournalLog('Refresh failed.','red');throw new Error(d.description);});}
+function refreshAccessToken(){const r=localStorage.getItem('ctrader_refresh');if(!r){addJournalLog('No refresh token.','red');return Promise.reject();}const ri=document.getElementById('connRedirectUri').value.trim();return fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:r,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})}).then(r=>r.json()).then(d=>{if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;localStorage.setItem('ctrader_access',d.accessToken);if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);addJournalLog('Token refreshed.','green');return d.accessToken;}addJournalLog('Refresh failed.','red');throw new Error(d.description);});}
 
+let _manualClose=false;
 function toggleConnection(){
   const creds=getCredentials(),btn=document.getElementById('connectBtn');
-  if(state.connected){disconnect();return;}
+  if(state.connected){_manualClose=true;disconnect();return;}
   if(state.connecting)return;
   state.connecting=true;btn.textContent='Connecting...';setConnStatus('connecting','Connecting...');
   const host=creds.env==='live'?'live.ctraderapi.com':'demo.ctraderapi.com',url='wss://'+host+':5036';
@@ -839,9 +850,23 @@ function toggleConnection(){
   ws.onopen=()=>{addJournalLog('WebSocket connected.','green');setConnStatus('connecting','Authenticating...');authenticateApp();};
   ws.onmessage=e=>{if(typeof e.data==='string')handleMessage(e.data);else if(e.data instanceof Blob)e.data.text().then(t=>handleMessage(t)).catch(()=>{});};
   ws.onerror=()=>{addJournalLog('WebSocket error','red');state.connecting=false;btn.textContent='Connect';setConnStatus('offline','Connection error');};
-  ws.onclose=ev=>{addJournalLog('WebSocket closed ('+ev.code+')','yellow');state.connecting=false;state.connected=false;btn.textContent='Connect';setConnStatus('offline','Disconnected');clearInterval(heartbeatInterval);const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';};
+  ws.onclose=ev=>{
+    clearInterval(heartbeatInterval);
+    state.connecting=false;state.connected=false;
+    btn.textContent='Connect';setConnStatus('offline','Disconnected');
+    const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
+    if(_manualClose){addJournalLog('Disconnected (manual).','yellow');_manualClose=false;return;}
+    addJournalLog('Connection lost. Reconnecting in 3s...','yellow');
+    setTimeout(autoReconnect,3000);
+  };
 }
-function disconnect(){if(heartbeatInterval)clearInterval(heartbeatInterval);if(ws){ws.close();ws=null;}state.connected=false;state.connecting=false;document.getElementById('connectBtn').textContent='Connect';setConnStatus('offline','Disconnected');const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';addJournalLog('Disconnected.','yellow');}
+function autoReconnect(){
+  const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();
+  if(!tok){addJournalLog('No saved token — please re-authorize.','red');return;}
+  document.getElementById('connAccessToken').value=tok;
+  if(!state.connected&&!state.connecting)toggleConnection();
+}
+function disconnect(){_manualClose=true;if(heartbeatInterval)clearInterval(heartbeatInterval);if(ws){ws.close();ws=null;}state.connected=false;state.connecting=false;document.getElementById('connectBtn').textContent='Connect';setConnStatus('offline','Disconnected');const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';addJournalLog('Disconnected.','yellow');_manualClose=false;}
 function authenticateApp(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.APPLICATION_AUTH_REQ,payload:{clientId:c.clientId,clientSecret:c.clientSecret}});addJournalLog('App auth sent.','blue');}
 function authenticateAccount(){const c=getCredentials(),id=parseInt(c.accountId,10);if(!id||isNaN(id)){addJournalLog('Invalid account ID.','red');return;}sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ACCOUNT_AUTH_REQ,payload:{ctidTraderAccountId:id,accessToken:c.accessToken}});addJournalLog('Account auth #'+id,'blue');}
 function getAccountsByToken(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ,payload:{accessToken:c.accessToken}});}
@@ -906,16 +931,24 @@ function subscribeSpots(){
 }
 function handleSymbolList(payload){
   const syms=payload.symbol||payload.symbols||[];
-  syms.forEach(s=>{state.symbolIdMap[s.symbolId]=s.symbolName;state.symbolNameMap[s.symbolName]=s.symbolId;state._symDetails[s.symbolName]={digits:s.digits||5,pip:s.pipPosition||2};});
+  const cryptoNames=/^(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|EOS|EOS|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|UST|LUNA|TON|USDT|USDC|DAI)/i;
+  // Filter to crypto symbols whose minimum lot size is <= 0.1
+  const crypto=syms.filter(s=>{
+    const nm=s.symbolName||'';
+    if(!cryptoNames.test(nm)) return false;
+    const lotSize=s.lotSize||100000, minVol=s.minVolume||0;
+    const minLot=lotSize?minVol/lotSize:0;
+    return minLot>0 && minLot<=0.1;
+  });
+  const list=crypto.length?crypto:syms;
+  list.forEach(s=>{state.symbolIdMap[s.symbolId]=s.symbolName;state.symbolNameMap[s.symbolName]=s.symbolId;state._symDetails[s.symbolName]={digits:s.digits||5,pip:s.pipPosition||2,minLot:(s.lotSize?(s.minVolume||0)/s.lotSize:0.01)};});
   const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  // Build market watch rows for the first ~12 symbols
-  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';syms.slice(0,12).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=syms.length+' symbols';}
-  const dd=document.getElementById('orderSymbol');if(dd){dd.innerHTML='';syms.slice(0,40).forEach(s=>{const o=document.createElement('option');o.value=s.symbolName;o.textContent=s.symbolName;dd.appendChild(o);});}
-  // Subscribe to a curated major list if present, else first 8
-  const preferred=['EUR/USD','GBP/USD','USD/JPY','AUD/USD','USD/CAD','NZD/USD','EUR/JPY','USD/CHF'];
-  let ids=preferred.map(n=>state.symbolNameMap[n]).filter(Boolean);
-  if(ids.length<4) ids=syms.slice(0,8).map(s=>s.symbolId);
-  if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed: '+state.subscribedSymbols.join(', '),'green');if(!state._currentSymbol&&syms[0])selectSymbol(syms[0].symbolName);}
+  // Build market watch rows (crypto only)
+  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' crypto symbols';}
+  const dd=document.getElementById('orderSymbol');if(dd){dd.innerHTML='';list.slice(0,40).forEach(s=>{const o=document.createElement('option');o.value=s.symbolName;o.textContent=s.symbolName;dd.appendChild(o);});}
+  // Subscribe to crypto symbols (cap to 14 to stay light)
+  const ids=list.slice(0,14).map(s=>s.symbolId).filter(Boolean);
+  if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed: '+state.subscribedSymbols.join(', '),'green');if(!state._currentSymbol&&list[0])selectSymbol(list[0].symbolName);}
 }
 function handleSpotEvent(payload){
   const name=state.symbolIdMap[payload.symbolId];if(!name)return;
@@ -964,17 +997,34 @@ function loadHistory(name){
     symbolId:sid, fromTimestamp:from, toTimestamp:now, maxDepth:500, type:'TICKS'
   }});
 }
+function buildOrder(sn,side,vol,sl,tp,cm){
+  const sid=state.symbolNameMap[sn];
+  if(!sid){addJournalLog('Symbol not mapped: '+sn,'red');return null;}
+  if(!vol||vol<=0){addJournalLog('Invalid volume.','red');return null;}
+  const tradeSize=Math.round(vol*100000);
+  if(tradeSize<1){addJournalLog('Volume too small.','red');return null;}
+  const o={
+    ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
+    symbolId:sid,
+    tradeSide:side==='buy'?'BUY':'SELL',
+    tradeSize:tradeSize,
+    marketOrderType:'MARKET',
+    accessToken:getCredentials().accessToken,
+    label:'cTrader', comment:cm||'cTrader'
+  };
+  if(sl>0)o.stopLossPips=sl;
+  if(tp>0)o.takeProfitPips=tp;
+  return o;
+}
 function placeOrder(side){
   if(!state.connected){addJournalLog('Cannot trade: not connected.','red');return;}
-  const sn=document.getElementById('orderSymbol').value,sid=state.symbolNameMap[sn],vol=parseFloat(document.getElementById('orderVolume').value)||0.01,sl=parseFloat(document.getElementById('orderSL').value)||0,tp=parseFloat(document.getElementById('orderTP').value)||0,cm=document.getElementById('orderComment').value||'cTrader';
-  if(!sid){addJournalLog('Symbol not mapped.','red');return;}
-  const o={ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:sid,orderType:'MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:vol*100000,label:'cTrader',comment:cm,accessToken:getCredentials().accessToken};
-  if(sl>0)o.stopLossPips=sl;if(tp>0)o.takeProfitPips=tp;
+  const sn=document.getElementById('orderSymbol').value,vol=parseFloat(document.getElementById('orderVolume').value)||0.01,sl=parseFloat(document.getElementById('orderSL').value)||0,tp=parseFloat(document.getElementById('orderTP').value)||0,cm=document.getElementById('orderComment').value||'cTrader';
+  const o=buildOrder(sn,side,vol,sl,tp,cm); if(!o)return;
   sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});
   addJournalLog('Placing '+(side.toUpperCase())+' '+vol+' '+sn,side==='buy'?'green':'red');closeModal('orderModal');
 }
-function placeQuickOrder(side){const vol=parseFloat(document.getElementById('oneClickVolume').value)||0.1;triggerAutoOrder(state._currentSymbol,side,vol,30,90);}
-function closePositionApi(id){if(!state.connected)return;sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.CLOSE_POSITION_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,positionId:id,volume:0}});addJournalLog('Closing #'+id,'yellow');}
+function placeQuickOrder(side){const vol=parseFloat(document.getElementById('oneClickVolume').value)||0.1;const o=buildOrder(state._currentSymbol,side,vol,30,90,'cTrader');if(o)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});}
+function closePositionApi(id){if(!state.connected)return;sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.CLOSE_POSITION_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,positionId:id,volume:0,accessToken:getCredentials().accessToken}});addJournalLog('Closing #'+id,'yellow');}
 function syncVolumeInputs(v){document.getElementById('oneClickVolume').value=v;document.getElementById('orderVolume').value=v;}
 
 // ============================================================
@@ -1010,11 +1060,14 @@ function showMobileView(view,el){document.querySelectorAll('.mt5-mobile-tabbar .
 //  INIT
 // ============================================================
 initLightweightChart();
-(function(){const ri=document.getElementById('connRedirectUri'),rd=document.getElementById('redirectDisplay');if(ri&&rd)ri.addEventListener('input',function(){rd.textContent=this.value||'https://ctraderbot.vercel.app';});})();
-(function(){const sel=document.getElementById('connAccountId');if(sel)sel.addEventListener('change',function(){const accs=window._allAccounts||[],pick=accs.find(a=>a.ctidTraderAccountId==this.value);if(pick){const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive;document.getElementById('connEnv').value=live?'live':'demo';if(state.connected||state.connecting){addJournalLog('Switching account...','blue');disconnect();setTimeout(toggleConnection,500);}}});})();
+(function(){const ri=document.getElementById('connRedirectUri'),rd=document.getElementById('redirectDisplay');if(ri&&rd)ri.addEventListener('input',function(){rd.textContent=this.value||'https://ctraderbot.vercel.app';localStorage.setItem('ctrader_redirect',this.value);});})();
+(function(){const saved=localStorage.getItem('ctrader_redirect');if(saved){const ri=document.getElementById('connRedirectUri');if(ri&&!ri.value)ri.value=saved;}})();
+(function(){const tok=localStorage.getItem('ctrader_access');if(tok){const ta=document.getElementById('connAccessToken');if(ta&&!ta.value)ta.value=tok;}})();
+(function(){const acc=localStorage.getItem('ctrader_account');if(acc){const sel=document.getElementById('connAccountId');if(sel&&!sel.value){const o=document.createElement('option');o.value=acc;o.textContent='#'+acc;sel.appendChild(o);sel.value=acc;}}})();
+(function(){const sel=document.getElementById('connAccountId');if(sel)sel.addEventListener('change',function(){localStorage.setItem('ctrader_account',this.value);const accs=window._allAccounts||[],pick=accs.find(a=>a.ctidTraderAccountId==this.value);if(pick){const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive;document.getElementById('connEnv').value=live?'live':'demo';if(state.connected||state.connecting){addJournalLog('Switching account...','blue');disconnect();setTimeout(toggleConnection,500);}}});})();
 (function(){const p=new URLSearchParams(window.location.search),code=p.get('code');if(code){if(window.opener&&window.opener.receiveOAuthCode){window.opener.receiveOAuthCode(code);window.close();}else{document.getElementById('oauthRedirectInput').value=code;addJournalLog('OAuth code detected!','blue');setTimeout(exchangeAuthCode,500);if(window.history.replaceState)window.history.replaceState({}, {title:document.title}, window.location.pathname);}}})();
-addJournalLog('cTrader Terminal v3.0 loaded.','success');
-addJournalLog('Open File → Connect, then Authorize via OAuth.','blue');
+// Auto-connect using saved token (valid up to 30 days) — no re-OAuth needed
+(function(){const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();const acc=localStorage.getItem('ctrader_account')||document.getElementById('connAccountId').value.trim();if(tok&&acc){addJournalLog('Saved token found — auto-connecting...','green');setTimeout(autoReconnect,800);}else{addJournalLog('cTrader Terminal v3.0 loaded. Authorize to begin.','success');}})();
 </script>
 </body>
 </html>
