@@ -1398,20 +1398,15 @@ function startHeartbeat() {
 // ============================================================
 function subscribeSpots() {
   const symbolNames = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
-  // First get symbol list to map names to IDs
+  const creds = getCredentials();
+  const accountId = parseInt(creds.accountId, 10) || 0;
   const msg = {
     clientMsgId: nextMsgId(),
     payloadType: 2114, // PROTO_OA_SYMBOLS_LIST_REQ
-    payload: {},
+    payload: { ctidTraderAccountId: accountId },
   };
   sendWs(msg);
-
-  // Temporarily store for when we get symbol list back
   state._pendingSubSymbols = symbolNames;
-
-  // Also try direct spot subscribe with some common symbol IDs
-  // EUR/USD is usually 1, but it varies by broker
-  // We'll subscribe after symbol list
 }
 
 function handleSymbolList(payload) {
@@ -1474,12 +1469,12 @@ function updatePriceDisplay(name, bid, ask, payload) {
 // ============================================================
 function getOrderList() {
   const creds = getCredentials();
+  const accountId = parseInt(creds.accountId, 10) || 0;
+  if (!accountId) { addLog('Cannot get orders: no account ID', 'red'); return; }
   const msg = {
     clientMsgId: nextMsgId(),
     payloadType: PAYLOAD.ORDER_LIST_REQ,
-    payload: {
-      ctidTraderAccountId: parseInt(creds.accountId) || 0,
-    },
+    payload: { ctidTraderAccountId: accountId },
   };
   sendWs(msg);
 }
