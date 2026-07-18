@@ -1308,11 +1308,19 @@ function handleMessage(data) {
         });
         // Store for env auto-switch on selection change
         window._allAccounts = accounts;
-        // Auto-select first account; set env to match it
+        // Auto-select first account; reconnect if env mismatch
         const first = accounts[0];
         const firstIsDemo = first.isDemo || (first.accountType || '').toLowerCase().includes('demo');
+        const needEnv = firstIsDemo ? 'demo' : 'live';
+        const currentEnv = document.getElementById('connEnv').value;
         sel.value = first.ctidTraderAccountId;
-        document.getElementById('connEnv').value = firstIsDemo ? 'demo' : 'live';
+        document.getElementById('connEnv').value = needEnv;
+        if (needEnv !== currentEnv) {
+          addLog(`Environment mismatch: connected to "${currentEnv}" but account needs "${needEnv}", reconnecting...`, 'yellow');
+          disconnect();
+          setTimeout(() => toggleConnection(), 500);
+          return;
+        }
         authenticateAccount();
         break;
 
