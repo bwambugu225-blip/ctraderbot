@@ -719,7 +719,6 @@ label { display:block; font-size:12px; color:var(--text-secondary); margin-botto
               <div class="btn-group">
                 <button class="btn btn-secondary" id="oauthBtn" onclick="startOAuth()">🔑 Authorize with cTrader</button>
                 <button class="btn btn-secondary" id="connectBtn" onclick="toggleConnection()">Connect</button>
-                <button class="btn btn-secondary" onclick="loadDemoMode()">Demo Mode</button>
               </div>
               <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5;">
                 1. Add <strong id="redirectDisplay">https://ctraderbot.vercel.app</strong> as a <strong>Redirect URI</strong> in your app on <a href="https://connect.spotware.com/apps" target="_blank" style="color:var(--accent);">connect.spotware.com</a><br>
@@ -934,7 +933,6 @@ const state = {
   connected: false,
   connecting: false,
   botRunning: false,
-  isDemo: true,
   balance: 0,
   equity: 0,
   margin: 0,
@@ -1824,177 +1822,6 @@ function setChartTF(tf) {
 }
 
 // ============================================================
-//  SIMULATION MODE (fallback when no API)
-// ============================================================
-function loadDemoMode() {
-  if (ws && state.connected) { disconnect(); }
-
-  state.balance = 10000;
-  state.equity = 10000;
-  state.balanceStart = 10000;
-  state.isDemo = true;
-
-  document.getElementById('balanceVal').textContent = '$10,000.00';
-  document.getElementById('equityVal').textContent = '$10,000.00';
-  document.getElementById('equityVal').className = 'value green';
-  document.getElementById('marginVal').textContent = '$0.00';
-  document.getElementById('freeMarginVal').textContent = '$10,000.00';
-  document.getElementById('freeMarginVal').className = 'value green';
-  document.getElementById('dashBalance').textContent = '$10,000.00';
-  document.getElementById('dashEquity').textContent = '$10,000.00';
-  document.getElementById('dashPnL').textContent = '$0.00';
-  document.getElementById('marketSpread').textContent = 'Spread: 1.2 pips';
-  document.getElementById('bidPrice').textContent = '1.09250';
-  document.getElementById('askPrice').textContent = '1.09262';
-  document.getElementById('dayHigh').textContent = '1.09410';
-  document.getElementById('dayLow').textContent = '1.09130';
-  document.getElementById('dayVol').textContent = '12,450';
-
-  const badge = document.getElementById('connectionBadge');
-  badge.className = 'connection-badge connected';
-  badge.innerHTML = '<span class="connection-dot"></span> Demo Mode';
-
-  setConnStatus('online', 'Simulation mode active');
-  document.getElementById('connectBtn').textContent = 'Disconnect';
-  state.connected = true;
-
-  startSimulation();
-  addLog('Demo simulation mode activated', 'green');
-}
-
-let simPrice = 1.0925;
-let simInterval;
-
-function startSimulation() {
-  if (simInterval) clearInterval(simInterval);
-  simInterval = setInterval(() => {
-    const change = (Math.random() - 0.5) * 0.0005;
-    simPrice += change;
-    const bid = simPrice;
-    const ask = simPrice + 0.00012;
-    document.getElementById('bidPrice').textContent = bid.toFixed(5);
-    document.getElementById('askPrice').textContent = ask.toFixed(5);
-    updateChartFromPrice(bid);
-    updateSimAccount();
-  }, 1000);
-}
-
-function updateSimAccount() {
-  let pnl = 0;
-  state.positions.forEach(p => {
-    const current = simPrice;
-    if (p.side === 'buy') pnl += (current - p.entry) * p.volume * 100000;
-    else pnl += (p.entry - current) * p.volume * 100000;
-    p.current = current;
-    p.pnl = pnl;
-  });
-  state.equity = state.balance + pnl;
-  state.freeMargin = state.equity - state.margin;
-
-  document.getElementById('equityVal').textContent = '$' + state.equity.toFixed(2);
-  document.getElementById('equityVal').className = 'value' + (pnl >= 0 ? ' green' : ' red');
-  document.getElementById('freeMarginVal').textContent = '$' + state.freeMargin.toFixed(2);
-  document.getElementById('freeMarginVal').className = 'value' + (state.freeMargin >= 0 ? ' green' : ' red');
-
-  document.getElementById('dashEquity').textContent = '$' + state.equity.toFixed(2);
-  document.getElementById('dashPnL').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
-  document.getElementById('dashPnL').className = 'value' + (pnl >= 0 ? ' green' : ' red');
-  document.getElementById('dashPnLChange').textContent = pnl >= 0 ? '+' + (pnl/state.balance*100).toFixed(2) + '%' : (pnl/state.balance*100).toFixed(2) + '%';
-  document.getElementById('dashPnLChange').className = 'change' + (pnl >= 0 ? ' green' : ' red');
-
-  updatePositionsTable();
-}
-
-// Override placeOrder in demo mode
-const _origPlaceOrder = placeOrder;
-placeOrder = function(side) {
-  if (!state.connected) {
-    addLog('Click Demo Mode in Settings first', 'red');
-    return;
-  }
-  if (state.isDemo) {
-    const vol = parseFloat(document.getElementById('orderVolume').value) || 0.01;
-    const entry = simPrice;
-    const pos = {
-      id: Date.now(),
-      symbol: document.getElementById('orderSymbol').value,
-      side: side,
-      volume: vol,
-      entry: entry,
-      current: entry,
-      sl: side === 'buy' ? entry - 0.003 : entry + 0.003,
-      tp: side === 'buy' ? entry + 0.006 : entry - 0.006,
-      pnl: 0,
-    };
-    state.positions.push(pos);
-    state.trades++;
-    updatePosCount();
-    addLog(`[DEMO] ${side.toUpperCase()} ${vol} ${pos.symbol} @ ${entry.toFixed(5)}`, side === 'buy' ? 'green' : 'red');
-    updatePositionsTable();
-    updateDashboard();
-    return;
-  }
-  _origPlaceOrder(side);
-};
-
-// Override closePosition for demo mode
-const _origClose = closePositionApi;
-closePositionApi = function(id) {
-  if (state.isDemo) {
-    const idx = state.positions.findIndex(p => p.id === id);
-    if (idx === -1) return;
-    const pos = state.positions[idx];
-    const pnl = pos.pnl || 0;
-    state.balance += pnl;
-    state.positions.splice(idx, 1);
-    state.dailyPnl += pnl;
-    if (pnl > 0) state.wins++;
-    state.dailyTrades++;
-
-    addToHistory(pos, pnl);
-    updatePosCount();
-    addLog(`[DEMO] Closed ${pos.side.toUpperCase()} — P&L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`, pnl >= 0 ? 'green' : 'red');
-    updatePositionsTable();
-    updateDashboard();
-    return;
-  }
-  _origClose(id);
-};
-
-function addToHistory(pos, pnl) {
-  const t = new Date();
-  const row = document.createElement('tr');
-  row.innerHTML = `
-    <td>${t.toLocaleTimeString()}</td>
-    <td>${pos.symbol}</td>
-    <td><span class="side ${pos.side}">${pos.side.toUpperCase()}</span></td>
-    <td>${pos.volume.toFixed(2)}</td>
-    <td>${pos.entry.toFixed(5)}</td>
-    <td class="pnl ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
-    <td>$${state.balance.toFixed(2)}</td>`;
-  const body = document.getElementById('historyBody');
-  const empty = body.querySelector('td[colspan]');
-  if (empty) body.innerHTML = '';
-  if (body.firstChild) body.insertBefore(row, body.firstChild);
-  else body.appendChild(row);
-
-  const act = document.getElementById('activityBody');
-  const actEmpty = act.querySelector('td[colspan]');
-  if (actEmpty) act.innerHTML = '';
-  const arow = document.createElement('tr');
-  arow.innerHTML = `
-    <td>${t.toLocaleTimeString()}</td>
-    <td>Market</td>
-    <td>${pos.symbol}</td>
-    <td><span class="side ${pos.side}">${pos.side.toUpperCase()}</span></td>
-    <td>${pos.volume.toFixed(2)}</td>
-    <td>${pos.entry.toFixed(5)}</td>
-    <td class="pnl ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>`;
-  if (act.firstChild) act.insertBefore(arow, act.firstChild);
-  else act.appendChild(arow);
-}
-
-// ============================================================
 //  BOT CONTROL
 // ============================================================
 function toggleBot() {
@@ -2004,8 +1831,8 @@ function toggleBot() {
     status.textContent = 'Running';
     status.style.color = 'var(--green)';
     addLog('Bot started', 'green');
-    if (!state.connected && !state.isDemo) {
-      addLog('No connection active. Enable Demo Mode or connect.', 'yellow');
+    if (!state.connected) {
+      addLog('No connection active. Connect via Settings first.', 'yellow');
     }
   } else {
     status.textContent = 'Stopped';
@@ -2154,7 +1981,6 @@ function clearLogs() {
 
 addLog('FullBot v2.0 loaded — Client ID/Secret pre-configured', 'green');
 addLog('Open Settings → Connection → Authorize to get a token', 'blue');
-addLog('Or click "Demo Mode" for simulation', 'yellow');
 updateDashboard();
 
 window.addEventListener('resize', () => { drawChart(); });
