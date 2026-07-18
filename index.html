@@ -712,7 +712,7 @@ label { display:block; font-size:12px; color:var(--text-secondary); margin-botto
                 <input type="text" id="connAccessToken" placeholder="Auto-filled after OAuth" readonly>
               </div>
             </div>
-            <div style="background:var(--bg-primary);border-radius:8px;padding:14px;margin-bottom:12px;">
+              <div style="background:var(--bg-primary);border-radius:8px;padding:14px;margin-bottom:12px;">
               <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;font-weight:600;">OAuth 2.0 — Get Access Token</div>
               <div class="btn-group">
                 <button class="btn btn-secondary" id="oauthBtn" onclick="startOAuth()">🔑 Authorize with cTrader</button>
@@ -720,12 +720,12 @@ label { display:block; font-size:12px; color:var(--text-secondary); margin-botto
                 <button class="btn btn-secondary" onclick="loadDemoMode()">Demo Mode</button>
               </div>
               <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5;">
-                1. Set a <strong>Redirect URI</strong> in your app on <a href="https://connect.spotware.com/apps" target="_blank" style="color:var(--accent);">connect.spotware.com</a><br>
-                2. Enter it above, then click <strong>Authorize</strong> to open cTrader login<br>
-                3. After authorizing, you'll be redirected. <strong>Copy the full redirect URL</strong> and paste it here:<br>
+                1. Add <strong id="redirectDisplay">https://ctraderbot.vercel.app</strong> as a <strong>Redirect URI</strong> in your app on <a href="https://connect.spotware.com/apps" target="_blank" style="color:var(--accent);">connect.spotware.com</a><br>
+                2. Click <strong>Authorize</strong> above — log in with your cTID<br>
+                3. After authorizing, the token is auto-detected and filled below ⬇
                 <div style="display:flex;gap:8px;margin-top:6px;">
-                  <input type="text" id="oauthRedirectInput" placeholder="Paste the redirect URL with ?code=... here" style="flex:1;">
-                  <button class="btn btn-sm btn-secondary" onclick="exchangeAuthCode()">Exchange</button>
+                  <input type="text" id="oauthRedirectInput" placeholder="Or paste ?code=... manually" style="flex:1;font-size:11px;">
+                  <button class="btn btn-sm btn-secondary" onclick="exchangeAuthCode()">Go</button>
                 </div>
               </div>
             </div>
@@ -965,6 +965,8 @@ const CREDENTIALS = {
 // ============================================================
 //  OAUTH 2.0 FLOW
 // ============================================================
+let _oauthPopupCode = null;
+
 function getOAuthUrl() {
   const redirectUri = document.getElementById('connRedirectUri').value.trim();
   if (!redirectUri) {
@@ -982,29 +984,22 @@ function startOAuth() {
   const w = 600, h = 700;
   const left = (screen.width - w) / 2;
   const top = (screen.height - h) / 2;
-  window.open(url, 'ctrader_oauth',
+  const popup = window.open(url, 'ctrader_oauth',
     'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
     ',scrollbars=yes,resizable=yes');
-  addLog('OAuth window opened. Authorize and paste the redirect URL below.', 'blue');
+  addLog('OAuth window opened. Complete authorization there.', 'blue');
+}
+
+// Called by the popup window when it detects the OAuth code
+function receiveOAuthCode(code) {
+  _oauthPopupCode = code;
+  document.getElementById('oauthRedirectInput').value = code;
+  exchangeAuthCode();
 }
 
 function exchangeAuthCode() {
-  const input = document.getElementById('oauthRedirectInput').value.trim();
-  if (!input) { addLog('Paste the redirect URL from the browser after authorization', 'red'); return; }
-
-  let code = '';
-  try {
-    const url = new URL(input);
-    code = url.searchParams.get('code');
-  } catch {
-    // maybe just the code itself was pasted
-    code = input;
-  }
-
-  if (!code) {
-    addLog('No authorization code found in the URL. Make sure it contains ?code=...', 'red');
-    return;
-  }
+  let code = _oauthPopupCode || document.getElementById('oauthRedirectInput').value.trim();
+  if (!code) { addLog('No authorization code found', 'red'); return; }
 
   const redirectUri = document.getElementById('connRedirectUri').value.trim();
   addLog('Exchanging authorization code for access token...', 'blue');
@@ -1029,17 +1024,20 @@ function exchangeAuthCode() {
     const token = data.accessToken;
     if (token) {
       document.getElementById('connAccessToken').value = token;
-      addLog('Access token obtained! Expires in: ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
+      addLog('✓ Access token obtained! Expires in: ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
       if (data.refreshToken) {
         localStorage.setItem('ctrader_refresh', data.refreshToken);
-        addLog('Refresh token saved locally', 'green');
+        addLog('Refresh token saved', 'green');
       }
+      _oauthPopupCode = null;
       document.getElementById('oauthRedirectInput').value = '';
+      addLog('Click Connect to start trading', 'blue');
     } else {
       addLog('Unexpected response: ' + JSON.stringify(data), 'yellow');
     }
   })
-  .catch(err => addLog('Token exchange failed: ' + err.message, 'red'));
+  .catch(err => addLog('Token exchange failed: ' + err.message, 'red'))
+  .finally(() => { _oauthPopupCode = null; });
 }
 
 function refreshAccessToken() {
@@ -1996,8 +1994,36 @@ function clearLogs() {
 // ============================================================
 //  INIT
 // ============================================================
+// Sync redirect display with input
+(function() {
+  const ri = document.getElementById('connRedirectUri');
+  const rd = document.getElementById('redirectDisplay');
+  if (ri && rd) {
+    ri.addEventListener('input', function() { rd.textContent = this.value || 'https://ctraderbot.vercel.app'; });
+  }
+})();
+
+// Detect OAuth redirect with code in URL
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    if (window.opener && window.opener.receiveOAuthCode) {
+      window.opener.receiveOAuthCode(code);
+      window.close();
+    } else {
+      document.getElementById('oauthRedirectInput').value = code;
+      addLog('OAuth code detected! Exchanging for token...', 'blue');
+      setTimeout(exchangeAuthCode, 500);
+      if (window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }
+})();
+
 addLog('FullBot v2.0 loaded — Client ID/Secret pre-configured', 'green');
-addLog('Enter your Access Token + Account ID in Settings to connect live', 'blue');
+addLog('Open Settings → Connection → Authorize to get a token', 'blue');
 addLog('Or click "Demo Mode" for simulation', 'yellow');
 updateDashboard();
 
