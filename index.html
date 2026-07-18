@@ -871,6 +871,12 @@ const PAYLOAD = {
   TRADER_REQ: 2121,
   TRADER_RES: 2122,
   TRADER_UPDATE_EVENT: 2123,
+  ASSET_CLASS_LIST_REQ: 2153,
+  ASSET_CLASS_LIST_RES: 2154,
+  SYMBOL_CATEGORY_REQ: 2160,
+  SYMBOL_CATEGORY_RES: 2161,
+  SYMBOL_BY_ID_REQ: 2116,
+  SYMBOL_BY_ID_RES: 2117,
 };
 
 // ============================================================
@@ -1040,6 +1046,46 @@ function refreshAccessToken() {
     addLog('Token refresh failed: ' + (data.description || 'unknown error'), 'red');
     throw new Error(data.description);
   });
+}
+
+function saveCredentials() {
+  const env = document.getElementById('connEnv').value;
+  const accessToken = document.getElementById('connAccessToken').value.trim();
+  const accountId = document.getElementById('connAccountId').value.trim();
+  const redirectUri = document.getElementById('connRedirectUri').value.trim();
+  localStorage.setItem('ctrader_env', env);
+  localStorage.setItem('ctrader_access_token', accessToken);
+  localStorage.setItem('ctrader_account_id', accountId);
+  localStorage.setItem('ctrader_redirect_uri', redirectUri);
+}
+
+function loadCredentials() {
+  const env = localStorage.getItem('ctrader_env');
+  const accessToken = localStorage.getItem('ctrader_access_token');
+  const accountId = localStorage.getItem('ctrader_account_id');
+  const redirectUri = localStorage.getItem('ctrader_redirect_uri');
+
+  if (env) document.getElementById('connEnv').value = env;
+  if (accessToken) document.getElementById('connAccessToken').value = accessToken;
+  if (redirectUri) document.getElementById('connRedirectUri').value = redirectUri;
+  if (accountId) {
+    const sel = document.getElementById('connAccountId');
+    // We add the option if it doesn't exist yet, so we can select it
+    let exists = false;
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === accountId) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = accountId;
+      opt.textContent = '#' + accountId;
+      sel.appendChild(opt);
+    }
+    sel.value = accountId;
+  }
 }
 
 function getCredentials() {
@@ -1260,6 +1306,7 @@ function handleMessage(data) {
         // Restore user's selection if still valid, else auto-select
         const stillValid = prevVal && accounts.some(a => a.ctidTraderAccountId == prevVal);
         sel.value = stillValid ? prevVal : accounts[0].ctidTraderAccountId;
+        saveCredentials();
         const chosen = accounts.find(a => a.ctidTraderAccountId == sel.value) || accounts[0];
         const chosenLive = chosen.isLive === undefined ? (chosen.accountType || '').toLowerCase().includes('live') : chosen.isLive;
         const needEnv = chosenLive ? 'live' : 'demo';
@@ -1280,8 +1327,9 @@ function handleMessage(data) {
         state.connecting = false;
         updateConnectionUI();
         setConnStatus('online', 'Connected & authorized');
+        saveCredentials();
         startHeartbeat();
-        subscribeSpots();
+        discoverCryptoSymbols();
         getOrderList();
         getTraderInfo();
         addLog('Ready to trade', 'green');
@@ -1291,10 +1339,26 @@ function handleMessage(data) {
         addLog('Subscribed to spot prices', 'green');
         break;
 
+      case PAYLOAD.ASSET_CLASS_LIST_RES:
+        state.assetClasses = payload.assetClass || [];
+        checkDiscoveryProgress();
+        break;
+
+      case PAYLOAD.SYMBOL_CATEGORY_RES:
+        state.symbolCategories = payload.symbolCategory || [];
+        checkDiscoveryProgress();
+        break;
+
+      case PAYLOAD.SYMBOL_BY_ID_RES:
+        handleSymbolByIdRes(payload);
+        break;
+
       case 2115: // PROTO_OA_SYMBOLS_LIST_RES
         addLog(`Symbols list: ${(payload.symbol || payload.symbols || []).length} symbols`, 'blue');
         if (!payload.symbol && !payload.symbols) addLog('No symbol field in response: ' + JSON.stringify(payload).slice(0,200), 'red');
+        state.lightSymbols = payload.symbol || payload.symbols || [];
         handleSymbolList(payload);
+        checkDiscoveryProgress();
         break;
 
       case PAYLOAD.SPOT_EVENT:
@@ -1381,17 +1445,180 @@ function startHeartbeat() {
 // ============================================================
 //  MARKET DATA
 // ============================================================
-function subscribeSpots() {
-  const symbolNames = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
+function discoverCryptoSymbols() {
   const creds = getCredentials();
   const accountId = parseInt(creds.accountId, 10) || 0;
-  const msg = {
+  if (!accountId) return;
+
+  addLog('Discovering cryptocurrency markets...', 'blue');
+
+  state.assetClasses = null;
+  state.symbolCategories = null;
+  state.lightSymbols = null;
+  state._cryptoDetails = {};
+
+  // Request Asset Classes
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.ASSET_CLASS_LIST_REQ,
+    payload: { ctidTraderAccountId: accountId }
+  });
+
+  // Request Symbol Categories
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.SYMBOL_CATEGORY_REQ,
+    payload: { ctidTraderAccountId: accountId }
+  });
+
+  // Request Lightweight Symbols
+  sendWs({
     clientMsgId: nextMsgId(),
     payloadType: 2114, // PROTO_OA_SYMBOLS_LIST_REQ
-    payload: { ctidTraderAccountId: accountId },
-  };
-  sendWs(msg);
-  state._pendingSubSymbols = symbolNames;
+    payload: { ctidTraderAccountId: accountId }
+  });
+}
+
+function checkDiscoveryProgress() {
+  if (state.assetClasses && state.symbolCategories && state.lightSymbols) {
+    processCandidateCryptos();
+  }
+}
+
+function processCandidateCryptos() {
+  const cryptoAssetClassIds = (state.assetClasses || [])
+    .filter(ac => ac.name && ac.name.toLowerCase().includes('crypto'))
+    .map(ac => ac.id);
+
+  const cryptoCategoryIds = (state.symbolCategories || [])
+    .filter(cat => cat.name && (cat.name.toLowerCase().includes('crypto') || cryptoAssetClassIds.includes(cat.assetClassId)))
+    .map(cat => cat.id);
+
+  const candidateSymbols = (state.lightSymbols || []).filter(s => {
+    if (!s.enabled) return false;
+    if (cryptoCategoryIds.includes(s.symbolCategoryId)) return true;
+    const name = s.symbolName ? s.symbolName.toUpperCase() : '';
+    return /(BTC|ETH|LTC|XRP|DOGE|SOL|ADA|DOT|UNI|LINK|AVAX|SHIB|TRX|BCH|XLM|USDT|USDC)/.test(name);
+  });
+
+  addLog(`Found ${candidateSymbols.length} candidate crypto symbol(s). Requesting specifications...`, 'blue');
+
+  if (candidateSymbols.length === 0) {
+    addLog('No cryptocurrency symbols found.', 'red');
+    return;
+  }
+
+  // Request detailed specifications for all candidate symbols in one batch (limit to 100 for safety)
+  const symbolIds = candidateSymbols.map(s => s.symbolId).slice(0, 100);
+  const creds = getCredentials();
+  const accountId = parseInt(creds.accountId, 10) || 0;
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.SYMBOL_BY_ID_REQ,
+    payload: {
+      ctidTraderAccountId: accountId,
+      symbolId: symbolIds
+    }
+  });
+}
+
+function handleSymbolByIdRes(payload) {
+  const symbols = payload.symbol || [];
+  const matchedSymbols = [];
+
+  symbols.forEach(s => {
+    const lotSize = s.lotSize || 100000;
+    const minVolume = s.minVolume || 100;
+    const minLot = minVolume / lotSize;
+
+    // We want only cryptocurrency markets that offer a min of 0.1 or 0.01 lot sizes.
+    const isMatched = (Math.abs(minLot - 0.01) < 0.005) || (Math.abs(minLot - 0.1) < 0.005);
+
+    if (isMatched) {
+      state._cryptoDetails[s.symbolId] = {
+        symbolId: s.symbolId,
+        symbolName: state.symbolIdMap[s.symbolId] || `#${s.symbolId}`,
+        digits: s.digits || 2,
+        pipPosition: s.pipPosition || 2,
+        minLot: minLot,
+        lotSize: lotSize,
+        minVolume: minVolume
+      };
+      state._cryptoDetails[state.symbolIdMap[s.symbolId]] = state._cryptoDetails[s.symbolId];
+      matchedSymbols.push(state._cryptoDetails[s.symbolId]);
+    }
+  });
+
+  addLog(`Filtered cryptos: ${matchedSymbols.length} offering 0.01 or 0.1 min lot size.`, 'green');
+
+  const dropdown = document.getElementById('orderSymbol');
+  dropdown.innerHTML = '';
+
+  if (matchedSymbols.length === 0) {
+    addLog('No cryptos matched 0.01 or 0.1 min lot size. Listing all discovered cryptos instead.', 'yellow');
+    symbols.forEach(s => {
+      const lotSize = s.lotSize || 100000;
+      const minVolume = s.minVolume || 100;
+      const minLot = minVolume / lotSize;
+      state._cryptoDetails[s.symbolId] = {
+        symbolId: s.symbolId,
+        symbolName: state.symbolIdMap[s.symbolId] || `#${s.symbolId}`,
+        digits: s.digits || 2,
+        pipPosition: s.pipPosition || 2,
+        minLot: minLot,
+        lotSize: lotSize,
+        minVolume: minVolume
+      };
+      state._cryptoDetails[state.symbolIdMap[s.symbolId]] = state._cryptoDetails[s.symbolId];
+      matchedSymbols.push(state._cryptoDetails[s.symbolId]);
+    });
+  }
+
+  // Sort them alphabetically by name
+  matchedSymbols.sort((a, b) => a.symbolName.localeCompare(b.symbolName));
+
+  matchedSymbols.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.symbolName;
+    opt.textContent = `${s.symbolName} (Min: ${s.minLot})`;
+    dropdown.appendChild(opt);
+  });
+
+  // Subscribe to spot prices for all matched symbols
+  const creds = getCredentials();
+  const accountId = parseInt(creds.accountId, 10) || 0;
+  const ids = matchedSymbols.map(s => s.symbolId);
+
+  if (ids.length > 0) {
+    const msg = {
+      clientMsgId: nextMsgId(),
+      payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
+      payload: { ctidTraderAccountId: accountId, symbolId: ids },
+    };
+    sendWs(msg);
+    matchedSymbols.forEach(s => {
+      if (!state.subscribedSymbols.includes(s.symbolName)) {
+        state.subscribedSymbols.push(s.symbolName);
+      }
+    });
+    addLog(`Subscribed to spot prices for: ${state.subscribedSymbols.join(', ')}`, 'green');
+  }
+
+  // Set the default current symbol if we have matching ones
+  if (matchedSymbols.length > 0) {
+    const defaultSym = matchedSymbols[0].symbolName;
+    state._currentSymbol = defaultSym;
+    document.getElementById('marketSymbol').textContent = defaultSym;
+    document.getElementById('chartSymbolLabel').textContent = defaultSym + ' · M5';
+    chartData = [];
+    drawChart();
+
+    // Dynamically adjust volume input properties for default symbol
+    const volInput = document.getElementById('orderVolume');
+    volInput.min = matchedSymbols[0].minLot;
+    volInput.step = matchedSymbols[0].minLot;
+    volInput.value = matchedSymbols[0].minLot;
+  }
 }
 
 function handleSymbolList(payload) {
@@ -1443,8 +1670,11 @@ function updatePriceDisplay(name, bid, ask, payload) {
   const askEl = document.getElementById('askPrice');
   const prevBid = parseFloat(bidEl.dataset.last) || 0;
   const prevAsk = parseFloat(askEl.dataset.last) || 0;
-  bidEl.textContent = bid ? bid.toFixed(5) : '—';
-  askEl.textContent = ask ? ask.toFixed(5) : '—';
+
+  const digits = (state._cryptoDetails[name] && state._cryptoDetails[name].digits) !== undefined ? state._cryptoDetails[name].digits : 5;
+
+  bidEl.textContent = bid ? bid.toFixed(digits) : '—';
+  askEl.textContent = ask ? ask.toFixed(digits) : '—';
   bidEl.style.color = bid > prevBid ? 'var(--green)' : bid < prevBid ? 'var(--red)' : '';
   askEl.style.color = ask > prevAsk ? 'var(--green)' : ask < prevAsk ? 'var(--red)' : '';
   bidEl.dataset.last = bid || '';
@@ -1452,10 +1682,13 @@ function updatePriceDisplay(name, bid, ask, payload) {
   document.getElementById('marketSymbol').textContent = name;
   document.getElementById('chartSymbolLabel').textContent = name + ' · M5';
   if (payload) {
-    const spread = ask && bid ? ((ask - bid) * 10000).toFixed(1) : '—';
+    const pipPosition = (state._cryptoDetails[name] && state._cryptoDetails[name].pipPosition) || 5;
+    const pipsMultiplier = Math.pow(10, pipPosition);
+    const spreadVal = ask && bid ? (ask - bid) : null;
+    const spread = spreadVal !== null ? (spreadVal * pipsMultiplier).toFixed(1) : '—';
     document.getElementById('marketSpread').textContent = `Spread: ${spread} pips`;
-    if (payload.high) document.getElementById('dayHigh').textContent = payload.high.toFixed(5);
-    if (payload.low) document.getElementById('dayLow').textContent = payload.low.toFixed(5);
+    if (payload.high) document.getElementById('dayHigh').textContent = (payload.high / 100000).toFixed(digits);
+    if (payload.low) document.getElementById('dayLow').textContent = (payload.low / 100000).toFixed(digits);
     if (payload.volume) document.getElementById('dayVol').textContent = payload.volume;
   }
 }
@@ -1766,7 +1999,8 @@ function drawChart() {
     const val = max - range * i / 4;
     const y = pad + (h - 2*pad) * i / 4;
     ctx.textAlign = 'right';
-    ctx.fillText(val.toFixed(5), w - 8, y + 4);
+    const digits = (state._cryptoDetails[state._currentSymbol] && state._cryptoDetails[state._currentSymbol].digits) !== undefined ? state._cryptoDetails[state._currentSymbol].digits : 5;
+    ctx.fillText(val.toFixed(digits), w - 8, y + 4);
   }
 }
 
@@ -1939,6 +2173,43 @@ function clearLogs() {
 addLog('FullBot v2.0 loaded — Client ID/Secret pre-configured', 'green');
 addLog('Open Settings → Connection → Authorize to get a token', 'blue');
 updateDashboard();
+
+// Load and auto-connect if possible
+(function() {
+  loadCredentials();
+  const creds = getCredentials();
+  if (creds.accessToken && creds.accountId) {
+    addLog(`Saved login found for account #${creds.accountId}. Auto-connecting...`, 'green');
+    setTimeout(() => {
+      toggleConnection();
+    }, 500);
+  }
+})();
+
+// Listen for environment/redirectUri/token manual input changes to save them
+document.getElementById('connEnv').addEventListener('change', saveCredentials);
+document.getElementById('connRedirectUri').addEventListener('input', saveCredentials);
+document.getElementById('connAccessToken').addEventListener('input', saveCredentials);
+document.getElementById('connAccountId').addEventListener('change', saveCredentials);
+
+// Handle manual symbol dropdown selection changes
+document.getElementById('orderSymbol').addEventListener('change', function() {
+  const name = this.value;
+  state._currentSymbol = name;
+  chartData = [];
+  drawChart();
+  // Reset pricing displays
+  updatePriceDisplay(name, null, null, null);
+
+  // Dynamically update volume input properties
+  const details = state._cryptoDetails[name];
+  if (details) {
+    const volInput = document.getElementById('orderVolume');
+    volInput.min = details.minLot;
+    volInput.step = details.minLot;
+    volInput.value = details.minLot;
+  }
+});
 
 window.addEventListener('resize', () => { drawChart(); });
 </script>
