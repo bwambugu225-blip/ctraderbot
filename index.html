@@ -1347,6 +1347,7 @@ function handleMessage(data) {
         break;
 
       case 2115: // PROTO_OA_SYMBOLS_LIST_RES
+        addLog(`Symbols list: ${(payload.symbol || []).length} symbols`, 'blue');
         handleSymbolList(payload);
         break;
 
@@ -1473,16 +1474,20 @@ function handleSymbolList(payload) {
 
 function handleSpotEvent(payload) {
   const symbolId = payload.symbolId;
-  const bid = payload.bid;
-  const ask = payload.ask;
-  const name = state.symbolIdMap[symbolId] || `Symbol#${symbolId}`;
+  const name = state.symbolIdMap[symbolId] || `#${symbolId}`;
+  // cTrader sends prices as uint64 (e.g. 105987 = 1.05987)
+  const toPrice = v => v !== undefined && v !== null ? v / 100000 : null;
+  const bid = toPrice(payload.bid);
+  const ask = toPrice(payload.ask);
 
-  if (name === 'EUR/USD' || (!state._currentSymbol && name)) {
+  if (!state._currentSymbol) {
     state._currentSymbol = name;
+    state._currentBid = bid;
+    state._currentAsk = ask;
     updatePriceDisplay(name, bid, ask, payload);
   }
 
-  updateChartFromPrice(bid);
+  if (bid !== null) updateChartFromPrice(bid);
 }
 
 function updatePriceDisplay(name, bid, ask, payload) {
