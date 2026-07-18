@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>cTrader Terminal — MetaTrader 5 Style</title>
-<script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -622,7 +622,7 @@ const state = {
   balance:0, equity:0, margin:0, freeMargin:0,
   positions:[], pendingOrders:[], trades:0, wins:0, dailyPnl:0,
   symbolIdMap:{}, symbolNameMap:{}, _symDetails:{}, currentSymbolId:null, subscribedSymbols:[],
-  _currentSymbol:null, _currentTF:'M15', _chartType:'candles',
+  _currentSymbol:null, _currentTF:'M15', _chartType:'candles', _liveBar:null,
   _gridVisible:true, _activeDrawingTool:'cursor',
 };
 
@@ -643,10 +643,11 @@ function initLightweightChart(){
   chart=LightweightCharts.createChart(c,{
     width:c.clientWidth, height:c.clientHeight,
     layout:{backgroundColor:'#0b0e14',textColor:'#8c8c8c',fontSize:11,fontFamily:'Segoe UI,Tahoma,sans-serif'},
-    grid:{vertLines:{color:'#1a1f2c',style:LightweightCharts.LineStyle.Solid},horzLines:{color:'#1a1f2c',style:LightweightCharts.LineStyle.Solid}},
+    grid:{vertLines:{color:'#1a1f2c'},horzLines:{color:'#1a1f2c'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
     rightPriceScale:{borderColor:'#2b2b2b'},
-    timeScale:{borderColor:'#2b2b2b',timeVisible:true,secondsVisible:false},
+    timeScale:{borderColor:'#2b2b2b',timeVisible:true,secondsVisible:false,rightOffset:4},
+    handleScroll:true, handleScale:true,
   });
   window.addEventListener('resize',()=>{ if(chart) chart.resize(c.clientWidth,c.clientHeight); if(rsiChart){const r=document.getElementById('rsiContainer'); rsiChart.resize(r.clientWidth,r.clientHeight);} });
   setupChartSeries();
@@ -656,7 +657,7 @@ function setupChartSeries(){
   candleSeries=chart.addCandlestickSeries({upColor:'#00c05a',downColor:'#ff3b30',borderDownColor:'#ff3b30',borderUpColor:'#00c05a',wickDownColor:'#ff3b30',wickUpColor:'#00c05a'});
   barSeries=chart.addBarSeries({upColor:'#00c05a',downColor:'#ff3b30'});
   lineSeries=chart.addLineSeries({color:'#007acc',lineWidth:2});
-  setChartType(state._chartType); updateChartData();
+  setChartType(state._chartType);
 }
 function setChartType(t){
   state._chartType=t;
@@ -665,6 +666,7 @@ function setChartType(t){
   candleSeries.applyOptions({visible:t==='candles'});
   barSeries.applyOptions({visible:t==='bars'});
   lineSeries.applyOptions({visible:t==='line'});
+  updateChartData();
   addJournalLog('Chart type: '+t.toUpperCase(),'info');
 }
 function toggleGrid(){
@@ -677,47 +679,52 @@ function setChartTF(tf){
   state._currentTF=tf;
   document.getElementById('statusCurrentTf').textContent=tf;
   ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
-  // Reset bars for the new timeframe (history builds live from the spot stream)
-  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); }
+  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); loadHistory(state._currentSymbol); }
   addJournalLog('Timeframe: '+tf,'info');
 }
 function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
-// Live-only chart: build OHLC bars from real ticks. No fake seed history.
+// Live chart: build the current (forming) OHLC bar from real spot ticks on top of imported history
 function tfBarTime(){
   const bs=getTfSeconds(state._currentTF);
   const now=Math.floor(Date.now()/1000);
   return Math.floor(now/bs)*bs;
 }
+// Build the bar array to render = imported history + the live forming bar (if newer)
+function renderBars(){
+  const key=state._currentSymbol+'_'+state._currentTF;
+  const base=Array.isArray(ohlcHistory[key])?ohlcHistory[key].slice():[];
+  const lb=state._liveBar;
+  if(lb&&lb.time>0){
+    if(base.length&&base[base.length-1].time===lb.time) base[base.length-1]=lb;
+    else if(!base.length||lb.time>base[base.length-1].time) base.push(lb);
+  }
+  return cleanBars(base);
+}
 function updateChartFromPrice(price){
   if(!price||!state._currentSymbol||!candleSeries) return;
   const bt=tfBarTime();
-  const key=state._currentSymbol+'_'+state._currentTF;
-  if(!Array.isArray(ohlcHistory[key])) ohlcHistory[key]=[];
-  const h=ohlcHistory[key];
-  let last=h[h.length-1];
-  if(!last||last.time!==bt){
-    last={time:bt,open:price,high:price,low:price,close:price};
-    h.push(last);
-    if(h.length>500) h.shift();
-  } else {
-    last.high=Math.max(last.high,price);
-    last.low=Math.min(last.low,price);
-    last.close=price;
+  const bar={time:bt,open:+price.toFixed(5),high:+price.toFixed(5),low:+price.toFixed(5),close:+price.toFixed(5)};
+  const prev=state._liveBar;
+  if(prev&&prev.time===bt){
+    bar.open=prev.open;
+    bar.high=Math.max(prev.high,price);
+    bar.low=Math.min(prev.low,price);
+    bar.close=price;
   }
-  const bar={time:last.time,open:+last.open.toFixed(5),high:+last.high.toFixed(5),low:+last.low.toFixed(5),close:+last.close.toFixed(5)};
+  state._liveBar=bar;
   candleSeries.update(bar);
   barSeries.update(bar);
-  lineSeries.update({time:last.time,value:bar.close});
+  lineSeries.update({time:bt,value:price});
   // Throttle heavy indicator recompute to ~4x/sec to keep UI responsive
-  const now=Date.now(); if(!updateChartFromPrice._t||now-updateChartFromPrice._t>250){updateChartFromPrice._t=now;calculateIndicators(h);}
+  const now=Date.now(); if(!updateChartFromPrice._t||now-updateChartFromPrice._t>250){updateChartFromPrice._t=now;calculateIndicators(renderBars());}
 }
 function updateChartData(){
   if(!chart||!state._currentSymbol||!candleSeries) return;
-  const key=state._currentSymbol+'_'+state._currentTF, data=ohlcHistory[key]||[];
-  if(!data.length) return;
-  const clean=cleanBars(data);
-  candleSeries.setData(clean); barSeries.setData(clean); lineSeries.setData(clean.map(d=>({time:d.time,value:d.close})));
-  calculateIndicators(clean);
+  const data=renderBars();
+  if(!data.length){candleSeries.setData([]);barSeries.setData([]);lineSeries.setData([]);return;}
+  candleSeries.setData(data); barSeries.setData(data); lineSeries.setData(data.map(d=>({time:d.time,value:d.close})));
+  calculateIndicators(data);
+  if(chart.timeScale) chart.timeScale().fitContent();
 }
 // lightweight-charts requires strictly ascending, unique time values — sanitize
 function cleanBars(data){
@@ -725,7 +732,7 @@ function cleanBars(data){
   data.slice().sort((a,b)=>a.time-b.time).forEach(b=>{if(seen[b.time])return;seen[b.time]=1;out.push(b);});
   return out;
 }
-// Aggregate imported tick data into OHLC bars for the current timeframe
+// Aggregate imported tick data into OHLC bars for the current timeframe (legacy tick endpoint)
 function handleTickData(payload){
   const ticks=payload.tickData||payload.ticks||payload.data||[];
   if(!ticks.length){addJournalLog('No history ticks returned.','yellow');return;}
@@ -742,50 +749,33 @@ function handleTickData(payload){
     b.high=Math.max(b.high,p); b.low=Math.min(b.low,p); b.close=p;
   });
   const arr=Object.values(bars).sort((a,b)=>a.time-b.time);
-  if(arr.length){
-    // Preserve any live bar already built after import started
-    const existing=ohlcHistory[key];
-    if(Array.isArray(existing)&&existing.length){
-      const lastImp=arr[arr.length-1].time;
-      existing.forEach(b=>{ if(b.time>=lastImp) arr.push(b); });
-      arr.sort((a,b)=>a.time-b.time);
-    }
-    ohlcHistory[key]=arr;
-    addJournalLog('Imported '+arr.length+' historical bars for '+name,'green');
-    updateChartData();
-   } else {
-    addJournalLog('History ticks present but no bars formed.','yellow');
-  }
+  if(arr.length){ ohlcHistory[key]=arr; addJournalLog('Imported '+arr.length+' historical bars for '+name,'green'); updateChartData(); }
+  else addJournalLog('History ticks present but no bars formed.','yellow');
 }
 // cTrader trendbar period enum: M1=1,M2=2,M3=3,M4=4,M5=5,M10=6,M15=7,M30=8,H1=9,H4=10,D1=11,W1=12,MN1=13
 function tfToPeriod(tf){return {M1:1,M5:5,M15:7,H1:9,D1:11}[tf]||7;}
-// Real historical OHLC via ProtoOAGetTrendbarsRes (the supported endpoint)
+// Real historical OHLC imported from cTrader via ProtoOAGetTrendbarsRes
 function handleTrendbars(payload){
   const bars=payload.trendbar||payload.trendbars||payload.bars||[];
-  if(!bars.length){addJournalLog('No trendbars returned (history unavailable on this account).','yellow');return;}
+  if(!bars.length){addJournalLog('No history from cTrader for this symbol/timeframe.','yellow');return;}
   const name=state._currentSymbol, key=name+'_'+state._currentTF;
   const div=Math.pow(10, (state._symDetails[name]&&state._symDetails[name].digits)||5);
   const arr=bars.map(b=>{
     // cTrader trendbar timestamp is in MINUTES -> convert to seconds for lightweight-charts
-    const mins=b.utcTimestampInMinutes||b.utcTimestamp||Math.floor(Date.now()/60000);
-    const t=(mins>1e11?Math.floor(mins/60):mins)*60; // already-seconds safety
+    const mins=b.utcTimestampInMinutes!=null?b.utcTimestampInMinutes:(b.utcTimestamp||Math.floor(Date.now()/60000));
+    const t=(mins>1e11?Math.floor(mins/60):mins)*60;
     return {
       time:t,
-      open:(b.open||0)/div,
-      high:(b.high||0)/div,
-      low:(b.low||0)/div,
-      close:(b.close||0)/div
+      open:+(b.open||0)/div,
+      high:+(b.high||0)/div,
+      low:+(b.low||0)/div,
+      close:+(b.close||0)/div
     };
   }).filter(b=>b.close>0).sort((a,b)=>a.time-b.time);
   if(arr.length){
-    const existing=ohlcHistory[key];
-    if(Array.isArray(existing)&&existing.length){
-      const lastImp=arr[arr.length-1].time;
-      existing.forEach(b=>{ if(b.time>=lastImp) arr.push(b); });
-      arr.sort((a,b)=>a.time-b.time);
-    }
     ohlcHistory[key]=arr;
-    addJournalLog('Imported '+arr.length+' historical bars for '+name,'green');
+    state._liveBar=null; // history replaces any forming bar; live will resume on next tick
+    addJournalLog('Imported '+arr.length+' bars from cTrader for '+name,'green');
     updateChartData();
   } else {
     addJournalLog('Trendbars present but unreadable.','yellow');
@@ -1073,22 +1063,23 @@ function handleExecutionEvent(payload){
 function onSymbolChange(v){selectSymbol(v);}
 function selectSymbol(name){
   state._currentSymbol=name;
+  state._liveBar=null;
   document.getElementById('oneClickSymbol').textContent=name;
   document.getElementById('statusCurrentSymbol').textContent=name;
-  ohlcHistory[name+'_'+state._currentTF]=[];
-  updateChartData();
+  ohlcHistory[name+'_'+state._currentTF]=[]; updateChartData();
+  loadHistory(name); // import real OHLC history from cTrader for this symbol
   if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
 }
 
 // Request real historical OHLC via trendbars (the supported historical endpoint)
 function loadHistory(name){
   const sid=state.symbolNameMap[name]; if(!sid||!state.connected) return;
-  const periods=[1,5,7,9,11]; // M1,M5,M15,H1,D1
-  const from=Math.floor((Date.now()-1000*60*60*24*7)/60000); // 7 days ago, in minutes
-  addJournalLog('Loading history for '+name+' ('+state._currentTF+')...','blue');
+  const nowMin=Math.floor(Date.now()/60000);
+  const from=nowMin-60*24*7; // last 7 days, in minutes
+  addJournalLog('Importing '+name+' ('+state._currentTF+') history from cTrader...','blue');
   sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_TRENDBARS_REQ,payload:{
     ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
-    symbolId:sid, period:tfToPeriod(state._currentTF), fromTimestamp:from, count:500
+    symbolId:sid, period:tfToPeriod(state._currentTF), fromTimestamp:from, toTimestamp:nowMin, count:500
   }});
 }
 function buildOrder(sn,side,vol,sl,tp,cm){
