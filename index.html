@@ -607,6 +607,7 @@ const PAYLOAD = {
   ORDER_LIST_REQ: 2175, ORDER_LIST_RES: 2176,
   ERROR_RES: 2142, MARGIN_CHANGED_EVENT: 2141, CLIENT_DISCONNECT_EVENT: 2148,
   GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ: 2149, GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: 2150,
+  GET_TICK_DATA_REQ: 2574, GET_TICK_DATA_RES: 2575,
   ORDER_ERROR_EVENT: 2132,
 };
 
@@ -673,9 +674,8 @@ function setChartTF(tf){
   state._currentTF=tf;
   document.getElementById('statusCurrentTf').textContent=tf;
   ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
-  // Reset bars for the new timeframe and redraw from live ticks
-  if(state._currentSymbol) ohlcHistory[state._currentSymbol+'_'+tf]=[];
-  updateChartData();
+  // Reset bars for the new timeframe and reload history
+  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); loadHistory(state._currentSymbol); }
   addJournalLog('Timeframe: '+tf,'info');
 }
 function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
@@ -713,6 +713,28 @@ function updateChartData(){
   if(!data.length) return;
   candleSeries.setData(data); barSeries.setData(data); lineSeries.setData(data.map(d=>({time:d.time,value:d.close})));
   calculateIndicators(data);
+}
+// Aggregate imported tick data into OHLC bars for the current timeframe
+function handleTickData(payload){
+  const ticks=payload.tickData||[];
+  if(!ticks.length){addJournalLog('No history ticks returned.','yellow');return;}
+  const bs=getTfSeconds(state._currentTF);
+  const name=state._currentSymbol, key=name+'_'+state._currentTF;
+  const bars={};
+  ticks.forEach(t=>{
+    const ts=t.timestamp/1000, bt=Math.floor(ts/bs)*bs;
+    const bid=(t.bid||0)/100000, ask=(t.ask||0)/100000, p=(bid+ask)/2||bid||ask;
+    if(!p) return;
+    if(!bars[bt]) bars[bt]={time:bt,open:p,high:p,low:p,close:p};
+    const b=bars[bt];
+    b.high=Math.max(b.high,p); b.low=Math.min(b.low,p); b.close=p;
+  });
+  const arr=Object.values(bars).sort((a,b)=>a.time-b.time);
+  if(arr.length){
+    ohlcHistory[key]=arr;
+    addJournalLog('Imported '+arr.length+' historical bars for '+name,'green');
+    updateChartData();
+  }
 }
 function calcEMA(d,p){const e=[];if(!d.length)return e;const k=2/(p+1);let pe=d[0].close;e.push({time:d[0].time,value:pe});for(let i=1;i<d.length;i++){const v=d[i].close*k+pe*(1-k);e.push({time:d[i].time,value:v});pe=v;}return e;}
 function calcSMA(d,p){const s=[];for(let i=p-1;i<d.length;i++){let sum=0;for(let j=0;j<p;j++)sum+=d[i-j].close;s.push({time:d[i].time,value:sum/p});}return s;}
@@ -753,7 +775,7 @@ function evaluateSignals(name,price){
 function triggerAutoOrder(name,side,lots,sl,tp){
   if(!state.connected){addExpertLog('Order failed: disconnected.','error');return;}
   const id=state.symbolNameMap[name];if(!id)return;
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:id,orderType:'ORDER_TYPE_MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:lots*100000,label:'cTraderEA',comment:'EA',stopLossPips:sl,takeProfitPips:tp}});
+  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:id,orderType:'MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:lots*100000,label:'cTraderEA',comment:'EA',stopLossPips:sl,takeProfitPips:tp,accessToken:getCredentials().accessToken}});
   addExpertLog('PLACED '+side.toUpperCase()+' '+name+' lots '+lots.toFixed(2),'success');
 }
 function saveRiskSettings(){
@@ -857,6 +879,8 @@ function handleMessage(data){
       case PAYLOAD.SYMBOLS_LIST_RES:
       case 2115: handleSymbolList(payload);break;
       case PAYLOAD.SPOT_EVENT: handleSpotEvent(payload);break;
+      case PAYLOAD.GET_TICK_DATA_RES:
+      case 2575: handleTickData(payload);break;
       case PAYLOAD.TRADER_RES:
       case PAYLOAD.TRADER_UPDATE_EVENT: handleTraderInfo(payload);if(type===PAYLOAD.TRADER_UPDATE_EVENT)addJournalLog('Account updated.','blue');break;
       case PAYLOAD.MARGIN_CHANGED_EVENT: if(payload.usedMargin!==undefined){const md=payload.moneyDigits||0;state.margin=payload.usedMargin/Math.pow(10,md);}updateAccountDisplay();break;
@@ -926,13 +950,25 @@ function selectSymbol(name){
   document.getElementById('statusCurrentSymbol').textContent=name;
   ohlcHistory[name+'_'+state._currentTF]=[];
   updateChartData();
+  loadHistory(name);
   if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
+}
+
+// Import real historical OHLC by requesting tick data and aggregating into bars
+function loadHistory(name){
+  const sid=state.symbolNameMap[name]; if(!sid||!state.connected) return;
+  const now=Date.now(), from=now-1000*60*60*24*7; // last 7 days
+  addJournalLog('Loading history for '+name+'...','blue');
+  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_TICK_DATA_REQ,payload:{
+    ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
+    symbolId:sid, fromTimestamp:from, toTimestamp:now, maxDepth:500, type:'TICKS'
+  }});
 }
 function placeOrder(side){
   if(!state.connected){addJournalLog('Cannot trade: not connected.','red');return;}
   const sn=document.getElementById('orderSymbol').value,sid=state.symbolNameMap[sn],vol=parseFloat(document.getElementById('orderVolume').value)||0.01,sl=parseFloat(document.getElementById('orderSL').value)||0,tp=parseFloat(document.getElementById('orderTP').value)||0,cm=document.getElementById('orderComment').value||'cTrader';
   if(!sid){addJournalLog('Symbol not mapped.','red');return;}
-  const o={ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:sid,orderType:'ORDER_TYPE_MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:vol*100000,label:'cTrader',comment:cm};
+  const o={ctidTraderAccountId:parseInt(getCredentials().accountId)||0,symbolId:sid,orderType:'MARKET',tradeDirection:side==='buy'?'BUY':'SELL',volume:vol*100000,label:'cTrader',comment:cm,accessToken:getCredentials().accessToken};
   if(sl>0)o.stopLossPips=sl;if(tp>0)o.takeProfitPips=tp;
   sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});
   addJournalLog('Placing '+(side.toUpperCase())+' '+vol+' '+sn,side==='buy'?'green':'red');closeModal('orderModal');
