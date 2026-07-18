@@ -699,7 +699,7 @@ label { display:block; font-size:12px; color:var(--text-secondary); margin-botto
               </div>
               <div class="form-group">
                 <label>Account ID</label>
-                <input type="number" id="connAccountId" value="9847839" placeholder="e.g. 9847839">
+                <input type="number" id="connAccountId" placeholder="Auto-detected from access token">
               </div>
             </div>
             <div class="form-row">
@@ -1099,7 +1099,7 @@ function getCredentials() {
     clientSecret: CREDENTIALS.clientSecret,
     accessToken: document.getElementById('connAccessToken').value.trim(),
     refreshToken: localStorage.getItem('ctrader_refresh') || '',
-    accountId: document.getElementById('connAccountId').value.trim() || '9847839',
+    accountId: document.getElementById('connAccountId').value.trim(),
   };
 }
 
@@ -1287,9 +1287,7 @@ function handleMessage(data) {
         if (accounts.length > 0) {
           const acc = accounts[0];
           addLog(`Found account #${acc.ctidTraderAccountId} (${acc.accountType || 'unknown'})`, 'green');
-          if (!getCredentials().accountId) {
-            document.getElementById('connAccountId').value = acc.ctidTraderAccountId;
-          }
+          document.getElementById('connAccountId').value = acc.ctidTraderAccountId;
         }
         authenticateAccount();
         break;
