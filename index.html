@@ -938,13 +938,15 @@ function startHeartbeat(){if(heartbeatInterval)clearInterval(heartbeatInterval);
 // ============================================================
 function subscribeSpots(){
   const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  sendWs({clientMsgId:nextMsgId(),payloadType:2114,payload:{ctidTraderAccountId:id}});
-  state._pendingSub=state._pendingSub||['EUR/USD','GBP/USD','USD/JPY','AUD/USD','USD/CAD','NZD/USD'];
+  // 2114 = SYMBOLS_LIST_REQ — fetch the tradable symbol list, then subscribe in the handler
+  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SYMBOLS_LIST_REQ,payload:{ctidTraderAccountId:id}});
 }
 function handleSymbolList(payload){
   const syms=payload.symbol||payload.symbols||[];
-  const cryptoNames=/^(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|EOS|EOS|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|UST|LUNA|TON|USDT|USDC|DAI)/i;
-  // Filter to crypto symbols whose minimum lot size is <= 0.1
+  // One-time full dump so we can see exactly what symbols this account offers
+  if(!window._symDump){window._symDump=1;addJournalLog('ALL SYMBOLS ('+syms.length+'): '+syms.map(s=>s.symbolName).join(' | '),'info');}
+  const cryptoNames=/(^|\b)(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|TON|USDT|USDC|DAI)(USD|EUR|USDC|JPY)?($|\b)/i;
+  // Crypto symbols whose minimum lot size is <= 0.1
   const crypto=syms.filter(s=>{
     const nm=s.symbolName||'';
     if(!cryptoNames.test(nm)) return false;
@@ -952,13 +954,14 @@ function handleSymbolList(payload){
     const minLot=lotSize?minVol/lotSize:0;
     return minLot>0 && minLot<=0.1;
   });
-  const list=crypto.length?crypto:syms;
+  if(!crypto.length){addJournalLog('No crypto symbols matched in account (found '+syms.length+' total). Showing all as fallback.','yellow');}
+  const list=crypto.length?crypto:syms.slice(0,14);
   list.forEach(s=>{state.symbolIdMap[s.symbolId]=s.symbolName;state.symbolNameMap[s.symbolName]=s.symbolId;state._symDetails[s.symbolName]={digits:s.digits||5,pip:s.pipPosition||2,minLot:(s.lotSize?(s.minVolume||0)/s.lotSize:0.01)};});
   const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  // Build market watch rows (crypto only)
-  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' crypto symbols';}
+  // Build market watch rows
+  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' symbols';}
   const dd=document.getElementById('orderSymbol');if(dd){dd.innerHTML='';list.slice(0,40).forEach(s=>{const o=document.createElement('option');o.value=s.symbolName;o.textContent=s.symbolName;dd.appendChild(o);});}
-  // Subscribe to crypto symbols (cap to 14 to stay light)
+  // Actually subscribe to price spots (2127) for the matched symbols (cap 14)
   const ids=list.slice(0,14).map(s=>s.symbolId).filter(Boolean);
   if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed: '+state.subscribedSymbols.join(', '),'green');if(!state._currentSymbol&&list[0])selectSymbol(list[0].symbolName);}
 }
@@ -1018,8 +1021,8 @@ function buildOrder(sn,side,vol,sl,tp,cm){
     ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
     symbolId:sid,
     tradeSide:side==='buy'?'BUY':'SELL',
-    tradeSize:tradeSize,
-    marketOrderType:'MARKET',
+    orderType:'MARKET',
+    volume:tradeSize,
     accessToken:getCredentials().accessToken,
     label:'cTrader', comment:cm||'cTrader'
   };
