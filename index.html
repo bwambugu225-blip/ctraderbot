@@ -1034,7 +1034,7 @@ function exchangeAuthCode() {
       addLog('OAuth error: ' + (data.description || data.errorCode), 'red');
       return;
     }
-    const token = data.accessToken;
+      const token = data.accessToken;
     if (token) {
       document.getElementById('connAccessToken').value = token;
       addLog('✓ Access token obtained! Expires in ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
@@ -1044,7 +1044,8 @@ function exchangeAuthCode() {
       }
       _oauthPopupCode = null;
       document.getElementById('oauthRedirectInput').value = '';
-      addLog('Click Connect to start trading', 'blue');
+      addLog('Auto-connecting...', 'blue');
+      setTimeout(toggleConnection, 500);
     } else {
       addLog('Unexpected response: ' + JSON.stringify(data), 'yellow');
     }
