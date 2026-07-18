@@ -669,35 +669,48 @@ function toggleGrid(){
   chart.applyOptions({grid:{vertLines:{color:g},horzLines:{color:g}}});
   document.getElementById('gridToggleBtn').classList.toggle('active',state._gridVisible);
 }
+function setChartTF(tf){
+  state._currentTF=tf;
+  document.getElementById('statusCurrentTf').textContent=tf;
+  ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
+  // Reset bars for the new timeframe and redraw from live ticks
+  if(state._currentSymbol) ohlcHistory[state._currentSymbol+'_'+tf]=[];
+  updateChartData();
+  addJournalLog('Timeframe: '+tf,'info');
+}
 function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
-function seedChartHistory(symbol,tf,base){
-  const key=symbol+'_'+tf; ohlcHistory[key]=[];
-  const bs=getTfSeconds(tf), now=Math.floor(Date.now()/1000), total=120;
-  let price=base, digits=state._symDetails[symbol]?.digits||5, ts=1/Math.pow(10,digits);
-  for(let i=total;i>=1;i--){
-    const time=Math.floor((now-i*bs)/bs)*bs, ch=(Math.random()-0.49)*ts*25, open=price, close=price+ch;
-    ohlcHistory[key].push({time,open:+(open).toFixed(digits),high:+(Math.max(open,close)+Math.random()*ts*5).toFixed(digits),low:+(Math.min(open,close)-Math.random()*ts*5).toFixed(digits),close:+(close).toFixed(digits)});
-    price=close;
-  }
+// Live-only chart: build OHLC bars from real ticks. No fake seed history.
+function tfBarTime(){
+  const bs=getTfSeconds(state._currentTF);
+  const now=Math.floor(Date.now()/1000);
+  return Math.floor(now/bs)*bs;
 }
 function updateChartFromPrice(price){
-  if(!price||!state._currentSymbol) return;
-  const key=state._currentSymbol+'_'+state._currentTF, bs=getTfSeconds(state._currentTF);
-  const bt=Math.floor(Date.now()/1000/bs)*bs;
-  if(!ohlcHistory[key]) ohlcHistory[key]=[];
-  let h=ohlcHistory[key], last=h[h.length-1];
-  if(last&&last.time===bt){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price;}
-  else{
-    if(h.length===0){seedChartHistory(state._currentSymbol,state._currentTF,price);h=ohlcHistory[key];last=h[h.length-1];}
-    const open=last?last.close:price;
-    h.push({time:bt,open:+(open).toFixed(5),high:+(Math.max(open,price)).toFixed(5),low:+(Math.min(open,price)).toFixed(5),close:+(price).toFixed(5)});
-    if(h.length>500)h.shift();
+  if(!price||!state._currentSymbol||!candleSeries) return;
+  const bt=tfBarTime();
+  const key=state._currentSymbol+'_'+state._currentTF;
+  if(!Array.isArray(ohlcHistory[key])) ohlcHistory[key]=[];
+  const h=ohlcHistory[key];
+  let last=h[h.length-1];
+  if(!last||last.time!==bt){
+    last={time:bt,open:price,high:price,low:price,close:price};
+    h.push(last);
+    if(h.length>500) h.shift();
+  } else {
+    last.high=Math.max(last.high,price);
+    last.low=Math.min(last.low,price);
+    last.close=price;
   }
-  updateChartData();
+  const bar={time:last.time,open:+last.open.toFixed(5),high:+last.high.toFixed(5),low:+last.low.toFixed(5),close:+last.close.toFixed(5)};
+  candleSeries.update(bar);
+  barSeries.update(bar);
+  lineSeries.update({time:last.time,value:bar.close});
+  calculateIndicators(h);
 }
 function updateChartData(){
   if(!chart||!state._currentSymbol) return;
   const key=state._currentSymbol+'_'+state._currentTF, data=ohlcHistory[key]||[];
+  if(!data.length) return;
   candleSeries.setData(data); barSeries.setData(data); lineSeries.setData(data.map(d=>({time:d.time,value:d.close})));
   calculateIndicators(data);
 }
@@ -911,8 +924,7 @@ function selectSymbol(name){
   state._currentSymbol=name;
   document.getElementById('oneClickSymbol').textContent=name;
   document.getElementById('statusCurrentSymbol').textContent=name;
-  const key=name+'_'+state._currentTF;
-  if(!ohlcHistory[key]||!ohlcHistory[key].length)seedChartHistory(name,state._currentTF,1.1);
+  ohlcHistory[name+'_'+state._currentTF]=[];
   updateChartData();
   if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
 }
