@@ -1311,15 +1311,19 @@ function handleMessage(data) {
         });
         // Store for env auto-switch on selection change
         window._allAccounts = accounts;
-        // Auto-select first account; reconnect if env mismatch
-        const first = accounts[0];
-        const firstLive = first.isLive === undefined ? (first.accountType || '').toLowerCase().includes('live') : first.isLive;
-        const needEnv = firstLive ? 'live' : 'demo';
+        // Preserve user's selection if still valid, else auto-select
+        const currentVal = sel.value;
+        const stillValid = currentVal && accounts.some(a => a.ctidTraderAccountId == currentVal);
+        if (!stillValid) {
+          sel.value = accounts[0].ctidTraderAccountId;
+        }
+        const chosen = accounts.find(a => a.ctidTraderAccountId == sel.value) || accounts[0];
+        const chosenLive = chosen.isLive === undefined ? (chosen.accountType || '').toLowerCase().includes('live') : chosen.isLive;
+        const needEnv = chosenLive ? 'live' : 'demo';
         const currentEnv = document.getElementById('connEnv').value;
-        sel.value = first.ctidTraderAccountId;
         document.getElementById('connEnv').value = needEnv;
         if (needEnv !== currentEnv) {
-          addLog(`Environment mismatch: connected to "${currentEnv}" but account needs "${needEnv}", reconnecting...`, 'yellow');
+          addLog(`Environment mismatch: connected to "${currentEnv}" but account "${sel.value}" needs "${needEnv}", reconnecting...`, 'yellow');
           disconnect();
           setTimeout(() => toggleConnection(), 500);
           return;
@@ -1513,12 +1517,15 @@ function getTraderInfo() {
 
 function handleTraderInfo(payload) {
   const trader = payload.trader;
-  if (!trader) return;
-  const md = trader.moneyDigits || 0;
+  if (!trader) { addLog('Trader info: no trader data in response', 'yellow'); return; }
+  const md = trader.moneyDigits || trader.money_digits || 0;
   const divisor = Math.pow(10, md);
-  state.balance = (trader.balance || 0) / divisor;
+  const rawBalance = trader.balance ?? 0;
+  const balanceNum = typeof rawBalance === 'object' ? (rawBalance.amount || 0) : Number(rawBalance);
+  state.balance = balanceNum / divisor;
   state.equity = state.balance;
-  addLog(`Balance: $${state.balance.toFixed(2)}`, 'green');
+  state.depositAssetId = trader.depositAssetId || trader.deposit_asset_id || null;
+  addLog(`Balance: $${state.balance.toFixed(2)} (raw=${rawBalance}, md=${md})`, 'green');
   updateAccountDisplay();
   updateDashboard();
 }
