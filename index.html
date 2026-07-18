@@ -1420,27 +1420,29 @@ function handleSymbolList(payload) {
 function handleSpotEvent(payload) {
   const symbolId = payload.symbolId;
   const name = state.symbolIdMap[symbolId] || `#${symbolId}`;
-  // cTrader sends prices as uint64 (e.g. 105987 = 1.05987)
   const toPrice = v => v !== undefined && v !== null ? v / 100000 : null;
   const bid = toPrice(payload.bid);
   const ask = toPrice(payload.ask);
-
-  if (!state._currentSymbol) {
-    state._currentSymbol = name;
-    state._currentBid = bid;
-    state._currentAsk = ask;
+  if (!state._currentSymbol) state._currentSymbol = name;
+  if (name === state._currentSymbol) {
     updatePriceDisplay(name, bid, ask, payload);
+    if (bid !== null) updateChartFromPrice(bid);
   }
-
-  if (bid !== null) updateChartFromPrice(bid);
 }
 
 function updatePriceDisplay(name, bid, ask, payload) {
+  const bidEl = document.getElementById('bidPrice');
+  const askEl = document.getElementById('askPrice');
+  const prevBid = parseFloat(bidEl.dataset.last) || 0;
+  const prevAsk = parseFloat(askEl.dataset.last) || 0;
+  bidEl.textContent = bid ? bid.toFixed(5) : '—';
+  askEl.textContent = ask ? ask.toFixed(5) : '—';
+  bidEl.style.color = bid > prevBid ? 'var(--green)' : bid < prevBid ? 'var(--red)' : '';
+  askEl.style.color = ask > prevAsk ? 'var(--green)' : ask < prevAsk ? 'var(--red)' : '';
+  bidEl.dataset.last = bid || '';
+  askEl.dataset.last = ask || '';
   document.getElementById('marketSymbol').textContent = name;
-  document.getElementById('bidPrice').textContent = bid ? bid.toFixed(5) : '—';
-  document.getElementById('askPrice').textContent = ask ? ask.toFixed(5) : '—';
   document.getElementById('chartSymbolLabel').textContent = name + ' · M5';
-
   if (payload) {
     const spread = ask && bid ? ((ask - bid) * 10000).toFixed(1) : '—';
     document.getElementById('marketSpread').textContent = `Spread: ${spread} pips`;
