@@ -922,6 +922,9 @@ const PAYLOAD = {
   GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: 2150,
   ORDER_LIST_REQ: 2175,
   ORDER_LIST_RES: 2176,
+  TRADER_REQ: 2121,
+  TRADER_RES: 2122,
+  TRADER_UPDATE_EVENT: 2123,
 };
 
 // ============================================================
@@ -1333,6 +1336,7 @@ function handleMessage(data) {
         startHeartbeat();
         subscribeSpots();
         getOrderList();
+        getTraderInfo();
         addLog('Ready to trade', 'green');
         break;
 
@@ -1373,9 +1377,20 @@ function handleMessage(data) {
         disconnect();
         break;
 
+      case PAYLOAD.TRADER_RES:
+        handleTraderInfo(payload);
+        break;
+
+      case PAYLOAD.TRADER_UPDATE_EVENT:
+        handleTraderInfo(payload);
+        addLog('Account info updated', 'blue');
+        break;
+
       case PAYLOAD.MARGIN_CHANGED_EVENT:
-        if (payload.margin) state.margin = payload.margin;
-        if (payload.marginLevel) state.marginLevel = payload.marginLevel;
+        if (payload.usedMargin !== undefined) {
+          const md = payload.moneyDigits || 0;
+          state.margin = payload.usedMargin / Math.pow(10, md);
+        }
         updateAccountDisplay();
         break;
 
@@ -1483,6 +1498,31 @@ function updatePriceDisplay(name, bid, ask, payload) {
     if (payload.low) document.getElementById('dayLow').textContent = payload.low.toFixed(5);
     if (payload.volume) document.getElementById('dayVol').textContent = payload.volume;
   }
+}
+
+// ============================================================
+//  TRADER INFO (balance, etc.)
+// ============================================================
+function getTraderInfo() {
+  const accountId = parseInt(getCredentials().accountId, 10) || 0;
+  if (!accountId) return;
+  sendWs({
+    clientMsgId: nextMsgId(),
+    payloadType: PAYLOAD.TRADER_REQ,
+    payload: { ctidTraderAccountId: accountId },
+  });
+}
+
+function handleTraderInfo(payload) {
+  const trader = payload.trader;
+  if (!trader) return;
+  const md = trader.moneyDigits || 0;
+  const divisor = Math.pow(10, md);
+  state.balance = (trader.balance || 0) / divisor;
+  state.equity = state.balance;
+  addLog(`Balance: $${state.balance.toFixed(2)}`, 'green');
+  updateAccountDisplay();
+  updateDashboard();
 }
 
 // ============================================================
@@ -1636,12 +1676,16 @@ function updatePosCount() {
 }
 
 function updateAccountDisplay() {
-  document.getElementById('balanceVal').textContent = '$' + state.balance.toFixed(2);
-  document.getElementById('equityVal').textContent = '$' + state.equity.toFixed(2);
-  document.getElementById('equityVal').className = 'value' + (state.equity >= state.balance ? ' green' : ' red');
-  document.getElementById('marginVal').textContent = '$' + state.margin.toFixed(2);
-  document.getElementById('freeMarginVal').textContent = '$' + state.freeMargin.toFixed(2);
-  document.getElementById('freeMarginVal').className = 'value' + (state.freeMargin >= 0 ? ' green' : ' red');
+  const b = state.balance || 0;
+  const e = state.equity || 0;
+  const m = state.margin || 0;
+  const f = state.freeMargin || (e - m);
+  document.getElementById('balanceVal').textContent = '$' + b.toFixed(2);
+  document.getElementById('equityVal').textContent = '$' + e.toFixed(2);
+  document.getElementById('equityVal').className = 'value' + (e >= b ? ' green' : ' red');
+  document.getElementById('marginVal').textContent = '$' + m.toFixed(2);
+  document.getElementById('freeMarginVal').textContent = '$' + f.toFixed(2);
+  document.getElementById('freeMarginVal').className = 'value' + (f >= 0 ? ' green' : ' red');
 }
 
 // ============================================================
