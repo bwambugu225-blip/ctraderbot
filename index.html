@@ -984,8 +984,8 @@ function handleSymbolList(payload){
   const syms=payload.symbol||payload.symbols||[];
   // One-time full dump so we can see exactly what symbols this account offers
   if(!window._symDump){window._symDump=1;addJournalLog('ALL SYMBOLS ('+syms.length+'): '+syms.map(s=>s.symbolName).join(' | '),'info');}
-  const cryptoNames=/(^|\b)(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|TON|USDT|USDC|DAI)(USD|EUR|USDC|JPY)?($|\b)/i;
-  // Crypto symbols that allow small lot sizes (min lot <= 1.0)
+  const cryptoNames=/\b(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|TON|USDT|USDC|DAI)(USD|EUR|USDC|JPY|ETH|LTC)?\b/i;
+  // Crypto symbols only (never fall back to non-crypto)
   const crypto=syms.filter(s=>{
     const nm=s.symbolName||'';
     if(!cryptoNames.test(nm)) return false;
@@ -993,16 +993,17 @@ function handleSymbolList(payload){
     const minLot=lotSize?minVol/lotSize:0;
     return minLot<=1.0;
   });
-  if(!crypto.length){addJournalLog('No crypto symbols matched in account (found '+syms.length+' total). Showing all as fallback.','yellow');}
-  const list=crypto.length?crypto:syms.slice(0,14);
+  if(!crypto.length){addJournalLog('No crypto symbols on this account (found '+syms.length+' total, none crypto). Try another account.','yellow');}
+  const list=crypto;
   list.forEach(s=>{state.symbolIdMap[s.symbolId]=s.symbolName;state.symbolNameMap[s.symbolName]=s.symbolId;state._symDetails[s.symbolName]={digits:s.digits||5,pip:s.pipPosition||2,lotSize:s.lotSize||100000,minVolume:s.minVolume||0,maxVolume:s.maxVolume||0,minLot:(s.lotSize?(s.minVolume||0)/s.lotSize:0.01)};});
   const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  // Build market watch rows
-  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' symbols';}
+  // Build market watch rows (crypto only)
+  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';if(!list.length){body.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--mt5-text-muted);padding:15px">No crypto symbols on this account</td></tr>';}else list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' crypto symbols';}
   const dd=document.getElementById('orderSymbol');if(dd){dd.innerHTML='';list.slice(0,40).forEach(s=>{const o=document.createElement('option');o.value=s.symbolName;o.textContent=s.symbolName;dd.appendChild(o);});}
-  // Actually subscribe to price spots (2127) for the matched symbols (cap 14)
+  // Actually subscribe to price spots (2127) for the matched crypto symbols (cap 14)
   const ids=list.slice(0,14).map(s=>s.symbolId).filter(Boolean);
-  if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed: '+state.subscribedSymbols.join(', '),'green');if(!state._currentSymbol&&list[0])selectSymbol(list[0].symbolName);}
+  if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed to '+ids.length+' crypto symbols.','green');if(!state._currentSymbol&&list[0])selectSymbol(list[0].symbolName);}
+  else {addJournalLog('Nothing to subscribe — switch to a crypto-enabled account.','yellow');}
 }
 function handleSpotEvent(payload){
   const name=state.symbolIdMap[payload.symbolId];if(!name)return;
@@ -1025,7 +1026,13 @@ function getTraderInfo(){const id=parseInt(getCredentials().accountId,10)||0;if(
 function handleTraderInfo(payload){const t=payload.trader;if(!t){addJournalLog('No trader data.','yellow');return;}const md=t.moneyDigits||0,d=Math.pow(10,md),raw=t.balance??0,b=typeof raw==='object'?(raw.amount||0):Number(raw);state.balance=b/d;state.equity=state.balance;addJournalLog('Balance: $'+state.balance.toFixed(2),'green');updateAccountDisplay();}
 function getOrderList(){const id=parseInt(getCredentials().accountId,10)||0;if(id)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ORDER_LIST_REQ,payload:{ctidTraderAccountId:id}});}
 function handleOrderList(payload){const os=payload.order||[];state.positions=[];state.pendingOrders=[];os.forEach(o=>{if(o.orderStatus==='ORDER_STATUS_FILLED')state.positions.push({id:o.positionId||o.orderId,symbol:state.symbolIdMap[o.symbolId]||'#'+o.symbolId,side:o.tradeDirection==='BUY'?'buy':'sell',volume:o.volume?o.volume/100000:0.1,entry:o.price,sl:o.stopLoss?.price,tp:o.takeProfit?.price,current:o.price});else if(o.orderStatus==='ORDER_STATUS_PENDING')state.pendingOrders.push(o);});updateToolboxGrids();}
-function handleExecutionEvent(payload){addJournalLog('Execution: '+payload.executionType+' — #'+payload.orderId,'blue');if(payload.executionType==='FILLED'||payload.executionType==='CANCELLED')setTimeout(getOrderList,500);}
+const EXEC_TYPE={1:'ACCEPTED',2:'FILLED',3:'REJECTED',4:'CANCELLED',5:'EXPIRED',6:'PARTIALLY_FILLED'};
+function handleExecutionEvent(payload){
+  const et=EXEC_TYPE[payload.executionType]||('TYPE_'+payload.executionType);
+  const id=payload.orderId||(payload.order&&payload.order.orderId)||payload.positionId||payload.dealId||'';
+  addJournalLog('Execution '+et+' — #'+id,'blue');
+  if(payload.executionType===2||payload.executionType===4||payload.executionType===3)setTimeout(getOrderList,500);
+}
 
 // ============================================================
 //  TRADING
