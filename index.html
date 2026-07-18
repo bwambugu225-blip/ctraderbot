@@ -622,7 +622,7 @@ const state = {
   balance:0, equity:0, margin:0, freeMargin:0,
   positions:[], pendingOrders:[], trades:0, wins:0, dailyPnl:0,
   symbolIdMap:{}, symbolNameMap:{}, _symDetails:{}, currentSymbolId:null, subscribedSymbols:[],
-  _currentSymbol:null, _currentTF:'M15', _chartType:'candles', _liveBar:null,
+  _currentSymbol:null, _currentTF:'M15', _chartType:'candles', _liveBar:null, _histTimer:null,
   _gridVisible:true, _activeDrawingTool:'cursor',
 };
 
@@ -757,7 +757,7 @@ function tfToPeriod(tf){return {M1:1,M5:5,M15:7,H1:9,D1:11}[tf]||7;}
 // Real historical OHLC imported from cTrader via ProtoOAGetTrendbarsRes
 function handleTrendbars(payload){
   const bars=payload.trendbar||payload.trendbars||payload.bars||[];
-  if(!bars.length){addJournalLog('No history from cTrader for this symbol/timeframe.','yellow');return;}
+  if(!bars.length){addJournalLog('cTrader returned no history — using market data.','yellow');seedExternalHistory(state._currentSymbol, state._currentTF);return;}
   const name=state._currentSymbol, key=name+'_'+state._currentTF;
   const div=Math.pow(10, (state._symDetails[name]&&state._symDetails[name].digits)||5);
   const arr=bars.map(b=>{
@@ -1030,13 +1030,14 @@ function handleSymbolList(payload){
 }
 function handleSpotEvent(payload){
   const name=state.symbolIdMap[payload.symbolId];if(!name)return;
-  const bid=payload.bid?payload.bid/100000:null,ask=payload.ask?payload.ask/100000:null;
+  const dig=(state._symDetails[name]&&state._symDetails[name].digits)||5, div=Math.pow(10,dig);
+  const bid=payload.bid?payload.bid/div:null,ask=payload.ask?payload.ask/div:null;
   const be=document.getElementById('bid_'+name),ae=document.getElementById('ask_'+name),se=document.getElementById('spr_'+name);
-  if(be&&ae){if(bid)be.textContent=bid.toFixed(5);if(ask)ae.textContent=ask.toFixed(5);if(ask&&bid)se.textContent=((ask-bid)*10000).toFixed(1);}
+  if(be&&ae){if(bid)be.textContent=bid.toFixed(dig);if(ask)ae.textContent=ask.toFixed(dig);if(ask&&bid)se.textContent=((ask-bid)/div*Math.pow(10,dig)).toFixed(1);}
   if(name===state._currentSymbol){
-    document.getElementById('oneClickBid').textContent=bid?bid.toFixed(5):'—';
-    document.getElementById('oneClickAsk').textContent=ask?ask.toFixed(5):'—';
-    document.getElementById('oneClickSpread').textContent='Spread: '+(ask&&bid?((ask-bid)*10000).toFixed(1):'—');
+    document.getElementById('oneClickBid').textContent=bid?bid.toFixed(dig):'—';
+    document.getElementById('oneClickAsk').textContent=ask?ask.toFixed(dig):'—';
+    document.getElementById('oneClickSpread').textContent='Spread: '+(ask&&bid?((ask-bid)/div*Math.pow(10,dig)).toFixed(1):'—');
     updateChartFromPrice(bid);
     if(state.botRunning)evaluateSignals(name,bid);
   }
@@ -1076,11 +1077,42 @@ function loadHistory(name){
   const sid=state.symbolNameMap[name]; if(!sid||!state.connected) return;
   const nowMin=Math.floor(Date.now()/60000);
   const from=nowMin-60*24*7; // last 7 days, in minutes
-  addJournalLog('Importing '+name+' ('+state._currentTF+') history from cTrader...','blue');
+  addJournalLog('Importing '+name+' ('+state._currentTF+') history...','blue');
   sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_TRENDBARS_REQ,payload:{
     ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
-    symbolId:sid, period:tfToPeriod(state._currentTF), fromTimestamp:from, toTimestamp:nowMin, count:500
+    symbolId:sid, period:tfToPeriod(state._currentTF), fromTimestamp:from, count:500
   }});
+  // Safety net: if cTrader does not deliver history (common on demo), seed from live market data
+  const key=name+'_'+state._currentTF;
+  clearTimeout(state._histTimer);
+  state._histTimer=setTimeout(()=>{
+    if(state._currentSymbol===name && (!ohlcHistory[key]||!ohlcHistory[key].length)) seedExternalHistory(name, state._currentTF);
+  }, 2500);
+}
+// Map a cTrader symbol (e.g. BTCUSD) to a Binance pair (BTCUSDT) for historical seeding
+function toBinanceSymbol(sym){
+  const m=String(sym||'').match(/^([A-Za-z]{2,6})(USD|USDC|EUR|JPY|GBP|USDT)$/);
+  if(!m) return null;
+  let base=m[1].toUpperCase(), quote=m[2].toUpperCase();
+  if(quote==='USD') quote='USDT';
+  if(quote==='USDC') quote='USDC';
+  return base+quote;
+}
+function seedExternalHistory(name, tf){
+  const bn=toBinanceSymbol(name);
+  if(!bn) return;
+  const iv={M1:'1m',M5:'5m',M15:'15m',H1:'1h',D1:'1d'}[tf]||'15m';
+  fetch('https://api.binance.com/api/v3/klines?symbol='+bn+'&interval='+iv+'&limit=500')
+    .then(r=>r.json())
+    .then(k=>{
+      if(!Array.isArray(k)||!k.length) return;
+      const key=name+'_'+tf;
+      ohlcHistory[key]=k.map(x=>({time:Math.floor(x[0]/1000),open:parseFloat(x[1]),high:parseFloat(x[2]),low:parseFloat(x[3]),close:parseFloat(x[4])}));
+      state._liveBar=null;
+      addJournalLog('Loaded '+ohlcHistory[key].length+' historical bars ('+bn+')','green');
+      updateChartData();
+    })
+    .catch(e=>addJournalLog('Market-data history unavailable: '+e.message,'yellow'));
 }
 function buildOrder(sn,side,vol,sl,tp,cm){
   const sid=state.symbolNameMap[sn];
