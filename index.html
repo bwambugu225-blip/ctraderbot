@@ -708,14 +708,22 @@ function updateChartFromPrice(price){
   candleSeries.update(bar);
   barSeries.update(bar);
   lineSeries.update({time:last.time,value:bar.close});
-  calculateIndicators(h);
+  // Throttle heavy indicator recompute to ~4x/sec to keep UI responsive
+  const now=Date.now(); if(!updateChartFromPrice._t||now-updateChartFromPrice._t>250){updateChartFromPrice._t=now;calculateIndicators(h);}
 }
 function updateChartData(){
-  if(!chart||!state._currentSymbol) return;
+  if(!chart||!state._currentSymbol||!candleSeries) return;
   const key=state._currentSymbol+'_'+state._currentTF, data=ohlcHistory[key]||[];
   if(!data.length) return;
-  candleSeries.setData(data); barSeries.setData(data); lineSeries.setData(data.map(d=>({time:d.time,value:d.close})));
-  calculateIndicators(data);
+  const clean=cleanBars(data);
+  candleSeries.setData(clean); barSeries.setData(clean); lineSeries.setData(clean.map(d=>({time:d.time,value:d.close})));
+  calculateIndicators(clean);
+}
+// lightweight-charts requires strictly ascending, unique time values — sanitize
+function cleanBars(data){
+  const seen={},out=[];
+  data.slice().sort((a,b)=>a.time-b.time).forEach(b=>{if(seen[b.time])return;seen[b.time]=1;out.push(b);});
+  return out;
 }
 // Aggregate imported tick data into OHLC bars for the current timeframe
 function handleTickData(payload){
@@ -758,10 +766,12 @@ function handleTrendbars(payload){
   const name=state._currentSymbol, key=name+'_'+state._currentTF;
   const div=Math.pow(10, (state._symDetails[name]&&state._symDetails[name].digits)||5);
   const arr=bars.map(b=>{
-    const t=(b.utcTimestampInMinutes||Math.floor(Date.now()/60000))*60;
+    // cTrader trendbar timestamp is in MINUTES -> convert to seconds for lightweight-charts
+    const mins=b.utcTimestampInMinutes||b.utcTimestamp||Math.floor(Date.now()/60000);
+    const t=(mins>1e11?Math.floor(mins/60):mins)*60; // already-seconds safety
     return {
       time:t,
-      open:(b.low!=null&&b.open!=null?b.open:0)/div,
+      open:(b.open||0)/div,
       high:(b.high||0)/div,
       low:(b.low||0)/div,
       close:(b.close||0)/div
@@ -863,7 +873,7 @@ function addJournalLog(m,c){const c2=document.getElementById('journalLogContaine
 const CREDENTIALS={clientId:'30945_Xq33WNRLYcZlfuZ2edXYWf1i2WC7fbiAsIqj0SvfZpOf5pWSoW',clientSecret:'Fg2dOfCVrJoNsLeCyl4PVTw8EMiHiJFJ9dEYIimm3hZG9REi6N'};
 function getCredentials(){return{env:document.getElementById('connEnv').value,clientId:CREDENTIALS.clientId,clientSecret:CREDENTIALS.clientSecret,accessToken:document.getElementById('connAccessToken').value.trim(),refreshToken:localStorage.getItem('ctrader_refresh')||'',accountId:document.getElementById('connAccountId').value.trim()};}
 function nextMsgId(){return 'cm_'+(++msgIdCounter)+'_'+Date.now();}
-function sendWs(msg){if(!ws||ws.readyState!==WebSocket.OPEN){addJournalLog('WebSocket not open','error');return;}ws.send(JSON.stringify(msg));}
+function sendWs(msg){if(!ws||ws.readyState!==WebSocket.OPEN)return;ws.send(JSON.stringify(msg));}
 function setConnStatus(type,text){const s=document.getElementById('connStatus'),t=document.getElementById('connStatusText');if(s)s.className='conn-status '+type;if(t)t.textContent=text;}
 
 function startOAuth(){const ri=document.getElementById('connRedirectUri').value.trim();if(!ri){addJournalLog('Enter Redirect URI first.','red');return;}const url='https://openapi.ctrader.com/apps/auth?client_id='+encodeURIComponent(CREDENTIALS.clientId)+'&redirect_uri='+encodeURIComponent(ri)+'&scope=trading';window.open(url,'ctrader_oauth','width=600,height=700');addJournalLog('OAuth window opened.','blue');}
@@ -883,35 +893,57 @@ function exchangeAuthCode(){
 }
 function refreshAccessToken(){const r=localStorage.getItem('ctrader_refresh');if(!r){addJournalLog('No refresh token.','red');return Promise.reject();}const ri=document.getElementById('connRedirectUri').value.trim();return fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:r,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})}).then(r=>r.json()).then(d=>{if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;localStorage.setItem('ctrader_access',d.accessToken);if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);addJournalLog('Token refreshed.','green');return d.accessToken;}addJournalLog('Refresh failed.','red');throw new Error(d.description);});}
 
-let _manualClose=false;
+let _intentionalClose=false;   // true => user wants to be disconnected, never auto-reconnect
+let _reconnectScheduled=false; // guard so only ONE reconnect is ever pending
+let _reconnectDelay=3000;
 function toggleConnection(){
   const creds=getCredentials(),btn=document.getElementById('connectBtn');
-  if(state.connected){_manualClose=true;disconnect();return;}
-  if(state.connecting)return;
-  state.connecting=true;btn.textContent='Connecting...';setConnStatus('connecting','Connecting...');
+  if(state.connected||state.connecting){_intentionalClose=true;_reconnectScheduled=false;disconnect();return;}
+  connectSocket();
+}
+function connectSocket(){
+  const creds=getCredentials(),btn=document.getElementById('connectBtn');
+  if(state.connected||state.connecting)return;
+  state.connecting=true;_reconnectScheduled=false;_intentionalClose=false;
+  btn.textContent='Connecting...';setConnStatus('connecting','Connecting...');
   const host=creds.env==='live'?'live.ctraderapi.com':'demo.ctraderapi.com',url='wss://'+host+':5036';
   addJournalLog('Connecting to '+host+':5036...','blue');
   ws=new WebSocket(url);
   ws.onopen=()=>{addJournalLog('WebSocket connected.','green');setConnStatus('connecting','Authenticating...');authenticateApp();};
   ws.onmessage=e=>{if(typeof e.data==='string')handleMessage(e.data);else if(e.data instanceof Blob)e.data.text().then(t=>handleMessage(t)).catch(()=>{});};
-  ws.onerror=()=>{addJournalLog('WebSocket error','red');state.connecting=false;btn.textContent='Connect';setConnStatus('offline','Connection error');};
+  ws.onerror=()=>{addJournalLog('WebSocket error','red');};
   ws.onclose=ev=>{
     clearInterval(heartbeatInterval);
     state.connecting=false;state.connected=false;
     btn.textContent='Connect';setConnStatus('offline','Disconnected');
     const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
-    if(_manualClose){addJournalLog('Disconnected (manual).','yellow');_manualClose=false;return;}
-    addJournalLog('Connection dropped — restoring...','yellow');
-    setTimeout(autoReconnect,3000);
+    if(_intentionalClose){addJournalLog('Disconnected (manual).','yellow');return;}
+    scheduleReconnect();
   };
+}
+function scheduleReconnect(){
+  if(_intentionalClose||_reconnectScheduled)return;
+  _reconnectScheduled=true;
+  const delay=_reconnectDelay;
+  _reconnectDelay=Math.min(_reconnectDelay*1.6,20000); // capped exponential backoff
+  addJournalLog('Connection dropped — restoring in '+(delay/1000)+'s...','yellow');
+  setTimeout(()=>{_reconnectScheduled=false;if(!_intentionalClose&&!state.connected&&!state.connecting)connectSocket();},delay);
 }
 function autoReconnect(){
   const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();
   if(!tok){addJournalLog('No saved token — please re-authorize.','red');return;}
   document.getElementById('connAccessToken').value=tok;
-  if(!state.connected&&!state.connecting)toggleConnection();
+  if(!state.connected&&!state.connecting)connectSocket();
 }
-function disconnect(){_manualClose=true;if(heartbeatInterval)clearInterval(heartbeatInterval);if(ws){ws.close();ws=null;}state.connected=false;state.connecting=false;document.getElementById('connectBtn').textContent='Connect';setConnStatus('offline','Disconnected');const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';addJournalLog('Disconnected.','yellow');_manualClose=false;}
+function disconnect(){
+  _intentionalClose=true;_reconnectScheduled=false;
+  if(heartbeatInterval)clearInterval(heartbeatInterval);
+  if(ws){try{ws.close();}catch(e){} ws=null;}
+  state.connected=false;state.connecting=false;
+  document.getElementById('connectBtn').textContent='Connect';setConnStatus('offline','Disconnected');
+  const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
+  addJournalLog('Disconnected.','yellow');
+}
 function authenticateApp(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.APPLICATION_AUTH_REQ,payload:{clientId:c.clientId,clientSecret:c.clientSecret}});addJournalLog('App auth sent.','blue');}
 function authenticateAccount(){const c=getCredentials(),id=parseInt(c.accountId,10);if(!id||isNaN(id)){addJournalLog('Invalid account ID.','red');return;}sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ACCOUNT_AUTH_REQ,payload:{ctidTraderAccountId:id,accessToken:c.accessToken}});addJournalLog('Account auth #'+id,'blue');}
 function getAccountsByToken(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ,payload:{accessToken:c.accessToken}});}
@@ -943,7 +975,8 @@ function handleMessage(data){
         if(ta)ta.value=pick.ctidTraderAccountId;
         authenticateAccount();break;}
       case PAYLOAD.ACCOUNT_AUTH_RES:
-        state.connected=true;state.connecting=false;document.getElementById('connectBtn').textContent='Disconnect';
+        state.connected=true;state.connecting=false;_intentionalClose=false;_reconnectDelay=3000;
+        document.getElementById('connectBtn').textContent='Disconnect';
         document.getElementById('statusConn').className='conn-indicator connected';document.getElementById('statusConnText').textContent='Connected';
         document.getElementById('navigatorAccountId').textContent='#'+getCredentials().accountId;
         addJournalLog('Account linked to cTrader.','green');setConnStatus('online','Connected & authorized');
@@ -963,8 +996,8 @@ function handleMessage(data){
       case PAYLOAD.ORDER_LIST_RES: handleOrderList(payload);break;
       case PAYLOAD.EXECUTION_EVENT: handleExecutionEvent(payload);break;
       case PAYLOAD.ORDER_ERROR_EVENT: addJournalLog('Order error: '+(payload.errorCode||'')+' — '+(payload.description||''),'red');break;
-      case PAYLOAD.ERROR_RES: addJournalLog('API Error ['+payload.errorCode+']: '+(payload.description||''),'red');if(payload.errorCode==='TOKEN_EXPIRED'||payload.errorCode==='INVALID_ACCESS_TOKEN'){addJournalLog('Refreshing...','yellow');refreshAccessToken().then(()=>{disconnect();setTimeout(toggleConnection,1000);}).catch(()=>addJournalLog('Refresh failed.','red'));}break;
-      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server closed session — restoring...','yellow');_manualClose=false;if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;setTimeout(autoReconnect,3000);break;
+      case PAYLOAD.ERROR_RES: addJournalLog('API Error ['+payload.errorCode+']: '+(payload.description||''),'red');if(payload.errorCode==='TOKEN_EXPIRED'||payload.errorCode==='INVALID_ACCESS_TOKEN'){addJournalLog('Refreshing...','yellow');refreshAccessToken().then(()=>{_intentionalClose=false;connectSocket();}).catch(()=>addJournalLog('Refresh failed.','red'));}break;
+      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server closed session — restoring...','yellow');if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;clearInterval(heartbeatInterval);scheduleReconnect();break;
       case 51: break;
       default: break;
     }
@@ -1025,7 +1058,7 @@ function handleSpotEvent(payload){
 function getTraderInfo(){const id=parseInt(getCredentials().accountId,10)||0;if(id)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.TRADER_REQ,payload:{ctidTraderAccountId:id}});}
 function handleTraderInfo(payload){const t=payload.trader;if(!t){addJournalLog('No trader data.','yellow');return;}const md=t.moneyDigits||0,d=Math.pow(10,md),raw=t.balance??0,b=typeof raw==='object'?(raw.amount||0):Number(raw);state.balance=b/d;state.equity=state.balance;addJournalLog('Balance: $'+state.balance.toFixed(2),'green');updateAccountDisplay();}
 function getOrderList(){const id=parseInt(getCredentials().accountId,10)||0;if(id)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ORDER_LIST_REQ,payload:{ctidTraderAccountId:id}});}
-function handleOrderList(payload){const os=payload.order||[];state.positions=[];state.pendingOrders=[];os.forEach(o=>{if(o.orderStatus==='ORDER_STATUS_FILLED')state.positions.push({id:o.positionId||o.orderId,symbol:state.symbolIdMap[o.symbolId]||'#'+o.symbolId,side:o.tradeDirection==='BUY'?'buy':'sell',volume:o.volume?o.volume/100000:0.1,entry:o.price,sl:o.stopLoss?.price,tp:o.takeProfit?.price,current:o.price});else if(o.orderStatus==='ORDER_STATUS_PENDING')state.pendingOrders.push(o);});updateToolboxGrids();}
+function handleOrderList(payload){const os=payload.order||[];state.positions=[];state.pendingOrders=[];os.forEach(o=>{const sym=state.symbolIdMap[o.symbolId]||('#'+o.symbolId),ls=(state._symDetails[sym]&&state._symDetails[sym].lotSize)||100000;if(o.orderStatus==='ORDER_STATUS_FILLED')state.positions.push({id:o.positionId||o.orderId,symbol:sym,side:o.tradeDirection==='BUY'?'buy':'sell',volume:o.volume?o.volume/ls:0.1,entry:o.price,sl:o.stopLoss?.price,tp:o.takeProfit?.price,current:o.price});else if(o.orderStatus==='ORDER_STATUS_PENDING')state.pendingOrders.push(o);});updateToolboxGrids();}
 const EXEC_TYPE={1:'ACCEPTED',2:'FILLED',3:'REJECTED',4:'CANCELLED',5:'EXPIRED',6:'PARTIALLY_FILLED'};
 function handleExecutionEvent(payload){
   const et=EXEC_TYPE[payload.executionType]||('TYPE_'+payload.executionType);
@@ -1065,10 +1098,11 @@ function buildOrder(sn,side,vol,sl,tp,cm){
   const d=state._symDetails[sn]||{};
   const lotSize=d.lotSize||100000;
   let volume=Math.round(vol*lotSize); // volume is in base units
+  if(volume<1) volume=1;              // cTrader volume must be >=1 unit
   // Clamp to the symbol's allowed range
   if(d.maxVolume&&volume>d.maxVolume) volume=d.maxVolume;
   if(d.minVolume&&volume<d.minVolume) volume=d.minVolume;
-  if(volume<1){addJournalLog('Volume too small.','red');return null;}
+  if(lotSize>1 && volume % lotSize !== 0) volume=Math.max(d.minVolume||lotSize, Math.round(volume/lotSize)*lotSize);
   const o={
     ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
     symbolId:sid,
@@ -1090,7 +1124,7 @@ function placeOrder(side){
   addJournalLog('Placing '+(side.toUpperCase())+' '+vol+' '+sn,side==='buy'?'green':'red');closeModal('orderModal');
 }
 function placeQuickOrder(side){const vol=parseFloat(document.getElementById('oneClickVolume').value)||0.1;const o=buildOrder(state._currentSymbol,side,vol,30,90,'cTrader');if(o)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});}
-function closePositionApi(id){if(!state.connected)return;sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.CLOSE_POSITION_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,positionId:id,volume:0,accessToken:getCredentials().accessToken}});addJournalLog('Closing #'+id,'yellow');}
+function closePositionApi(id){if(!state.connected)return;sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.CLOSE_POSITION_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,positionId:id,accessToken:getCredentials().accessToken}});addJournalLog('Closing #'+id,'yellow');}
 function syncVolumeInputs(v){document.getElementById('oneClickVolume').value=v;document.getElementById('orderVolume').value=v;}
 
 // ============================================================
@@ -1130,7 +1164,7 @@ initLightweightChart();
 (function(){const saved=localStorage.getItem('ctrader_redirect');if(saved){const ri=document.getElementById('connRedirectUri');if(ri&&!ri.value)ri.value=saved;}})();
 (function(){const tok=localStorage.getItem('ctrader_access');if(tok){const ta=document.getElementById('connAccessToken');if(ta&&!ta.value)ta.value=tok;}})();
 (function(){const acc=localStorage.getItem('ctrader_account');if(acc){const sel=document.getElementById('connAccountId');if(sel&&!sel.value){const o=document.createElement('option');o.value=acc;o.textContent='#'+acc;sel.appendChild(o);sel.value=acc;}}})();
-(function(){const sel=document.getElementById('connAccountId');if(sel)sel.addEventListener('change',function(){localStorage.setItem('ctrader_account',this.value);const accs=window._allAccounts||[],pick=accs.find(a=>a.ctidTraderAccountId==this.value);if(pick){const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive;document.getElementById('connEnv').value=live?'live':'demo';if(state.connected||state.connecting){addJournalLog('Switching account...','blue');disconnect();setTimeout(toggleConnection,500);}}});})();
+(function(){const sel=document.getElementById('connAccountId');if(sel)sel.addEventListener('change',function(){localStorage.setItem('ctrader_account',this.value);const accs=window._allAccounts||[],pick=accs.find(a=>a.ctidTraderAccountId==this.value);if(pick){const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive;document.getElementById('connEnv').value=live?'live':'demo';if(state.connected||state.connecting){addJournalLog('Switching account...','blue');disconnect();setTimeout(connectSocket,500);}}});})();
 (function(){const p=new URLSearchParams(window.location.search),code=p.get('code');if(code){if(window.opener&&window.opener.receiveOAuthCode){window.opener.receiveOAuthCode(code);window.close();}else{document.getElementById('oauthRedirectInput').value=code;addJournalLog('OAuth code detected!','blue');setTimeout(exchangeAuthCode,500);if(window.history.replaceState)window.history.replaceState({}, {title:document.title}, window.location.pathname);}}})();
 // Auto-connect using saved token (valid up to 30 days) — no re-OAuth needed
 (function(){const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();const acc=localStorage.getItem('ctrader_account')||document.getElementById('connAccountId').value.trim();if(tok&&acc){addJournalLog('Saved token found — auto-connecting...','green');setTimeout(autoReconnect,800);}else{addJournalLog('cTrader Terminal v3.0 loaded. Authorize to begin.','success');}})();
