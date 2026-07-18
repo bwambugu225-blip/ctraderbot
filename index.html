@@ -1144,7 +1144,7 @@ function toggleConnection() {
   setConnStatus('connecting', 'Connecting...');
 
   const host = creds.env === 'live' ? 'live.ctraderapi.com' : 'demo.ctraderapi.com';
-  const port = 5035;
+  const port = 5036;
   const url = `wss://${host}:${port}`;
   addLog(`Connecting to ${host}:${port}...`, 'blue');
 
@@ -1157,7 +1157,18 @@ function toggleConnection() {
   };
 
   ws.onmessage = (event) => {
-    handleMessage(event.data);
+    if (typeof event.data === 'string') {
+      handleMessage(event.data);
+    } else if (event.data instanceof Blob) {
+      event.data.text().then(txt => handleMessage(txt)).catch(() => {});
+    } else if (event.data instanceof ArrayBuffer) {
+      const txt = new TextDecoder().decode(event.data);
+      handleMessage(txt);
+    }
+  };
+
+  ws.onerror = (err) => {
+    addLog('WebSocket error', 'red');
   };
 
   ws.onclose = (e) => {
@@ -1343,7 +1354,7 @@ function handleMessage(data) {
         break;
 
       case 51:
-        // Heartbeat response
+        // Heartbeat from server — just a keepalive, no response needed
         break;
 
       default:
