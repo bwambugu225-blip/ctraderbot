@@ -677,8 +677,8 @@ function setChartTF(tf){
   state._currentTF=tf;
   document.getElementById('statusCurrentTf').textContent=tf;
   ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
-  // Reset bars for the new timeframe (history builds live from the spot stream)
-  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); }
+  // Reset bars for the new timeframe and auto-reload real history
+  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); if(state.connected)loadHistory(state._currentSymbol); }
   addJournalLog('Timeframe: '+tf,'info');
 }
 function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
@@ -901,7 +901,7 @@ function toggleConnection(){
     btn.textContent='Connect';setConnStatus('offline','Disconnected');
     const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
     if(_manualClose){addJournalLog('Disconnected (manual).','yellow');_manualClose=false;return;}
-    addJournalLog('Connection lost. Reconnecting in 3s...','yellow');
+    addJournalLog('Connection dropped — restoring...','yellow');
     setTimeout(autoReconnect,3000);
   };
 }
@@ -964,7 +964,7 @@ function handleMessage(data){
       case PAYLOAD.EXECUTION_EVENT: handleExecutionEvent(payload);break;
       case PAYLOAD.ORDER_ERROR_EVENT: addJournalLog('Order error: '+(payload.errorCode||'')+' — '+(payload.description||''),'red');break;
       case PAYLOAD.ERROR_RES: addJournalLog('API Error ['+payload.errorCode+']: '+(payload.description||''),'red');if(payload.errorCode==='TOKEN_EXPIRED'||payload.errorCode==='INVALID_ACCESS_TOKEN'){addJournalLog('Refreshing...','yellow');refreshAccessToken().then(()=>{disconnect();setTimeout(toggleConnection,1000);}).catch(()=>addJournalLog('Refresh failed.','red'));}break;
-      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server sent disconnect. Reconnecting...','red');_manualClose=false;if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;setTimeout(autoReconnect,3000);break;
+      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server closed session — restoring...','yellow');_manualClose=false;if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;setTimeout(autoReconnect,3000);break;
       case 51: break;
       default: break;
     }
@@ -1037,6 +1037,7 @@ function selectSymbol(name){
   document.getElementById('statusCurrentSymbol').textContent=name;
   ohlcHistory[name+'_'+state._currentTF]=[];
   updateChartData();
+  loadHistory(name); // auto-load real historical OHLC
   if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
 }
 
