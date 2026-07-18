@@ -1301,8 +1301,8 @@ function handleMessage(data) {
         addLog(`Found ${accounts.length} account(s)`, 'green');
         accounts.forEach((acc, i) => {
           const label = acc.accountType || acc.accountTypeName || 'unknown';
-          const isDemo = acc.isDemo || (label && label.toLowerCase().includes('demo'));
-          const env = isDemo ? 'demo' : 'live';
+          const isAccountLive = acc.isLive === undefined ? (label && label.toLowerCase().includes('live')) : acc.isLive;
+          const env = isAccountLive ? 'live' : 'demo';
           const opt = document.createElement('option');
           opt.value = acc.ctidTraderAccountId;
           opt.textContent = `#${acc.ctidTraderAccountId} — ${label} (${env})`;
@@ -1313,8 +1313,8 @@ function handleMessage(data) {
         window._allAccounts = accounts;
         // Auto-select first account; reconnect if env mismatch
         const first = accounts[0];
-        const firstIsDemo = first.isDemo || (first.accountType || '').toLowerCase().includes('demo');
-        const needEnv = firstIsDemo ? 'demo' : 'live';
+        const firstLive = first.isLive === undefined ? (first.accountType || '').toLowerCase().includes('live') : first.isLive;
+        const needEnv = firstLive ? 'live' : 'demo';
         const currentEnv = document.getElementById('connEnv').value;
         sel.value = first.ctidTraderAccountId;
         document.getElementById('connEnv').value = needEnv;
@@ -1453,18 +1453,16 @@ function handleSymbolList(payload) {
   const creds = getCredentials();
   const accountId = parseInt(creds.accountId, 10) || 0;
   const pending = state._pendingSubSymbols || [];
-  pending.forEach(name => {
-    const id = state.symbolNameMap[name];
-    if (id) {
-      const msg = {
-        clientMsgId: nextMsgId(),
-        payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
-        payload: { ctidTraderAccountId: accountId, symbolId: id },
-      };
-      sendWs(msg);
-      state.subscribedSymbols.push(name);
-    }
-  });
+  const ids = pending.map(name => state.symbolNameMap[name]).filter(id => id);
+  if (ids.length > 0) {
+    const msg = {
+      clientMsgId: nextMsgId(),
+      payloadType: PAYLOAD.SUBSCRIBE_SPOTS_REQ,
+      payload: { ctidTraderAccountId: accountId, symbolId: ids },
+    };
+    sendWs(msg);
+    pending.forEach(name => { if (state.symbolNameMap[name]) state.subscribedSymbols.push(name); });
+  }
 
   if (state.subscribedSymbols.length > 0) {
     addLog(`Subscribed to ${state.subscribedSymbols.join(', ')}`, 'green');
@@ -2113,8 +2111,8 @@ function clearLogs() {
       const accounts = window._allAccounts || [];
       const pick = accounts.find(a => a.ctidTraderAccountId == this.value);
       if (pick) {
-        const isDemo = pick.isDemo || (pick.accountType || '').toLowerCase().includes('demo');
-        document.getElementById('connEnv').value = isDemo ? 'demo' : 'live';
+        const live = pick.isLive === undefined ? (pick.accountType || '').toLowerCase().includes('live') : pick.isLive;
+        document.getElementById('connEnv').value = live ? 'live' : 'demo';
       }
     });
   }
