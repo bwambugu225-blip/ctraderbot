@@ -1292,11 +1292,14 @@ function handleMessage(data) {
         break;
 
       case 2115: // PROTO_OA_SYMBOLS_LIST_RES
-        addLog(`Symbols list: ${(payload.symbol || []).length} symbols`, 'blue');
+        addLog(`Symbols list: ${(payload.symbol || payload.symbols || []).length} symbols`, 'blue');
+        if (!payload.symbol && !payload.symbols) addLog('No symbol field in response: ' + JSON.stringify(payload).slice(0,200), 'red');
         handleSymbolList(payload);
         break;
 
       case PAYLOAD.SPOT_EVENT:
+        if (!state._spotLogCount) state._spotLogCount = 0;
+        if (state._spotLogCount++ < 5) addLog(`Spot event: id=${payload.symbolId} bid=${payload.bid} ask=${payload.ask}`, 'purple');
         handleSpotEvent(payload);
         break;
 
@@ -1392,7 +1395,11 @@ function subscribeSpots() {
 }
 
 function handleSymbolList(payload) {
-  const symbols = payload.symbol || [];
+  const symbols = payload.symbol || payload.symbols || [];
+  if (symbols.length === 0) {
+    addLog('No symbols found in response', 'red');
+    return;
+  }
   symbols.forEach(s => {
     state.symbolIdMap[s.symbolId] = s.symbolName;
     state.symbolNameMap[s.symbolName] = s.symbolId;
@@ -1402,6 +1409,7 @@ function handleSymbolList(payload) {
   const accountId = parseInt(creds.accountId, 10) || 0;
   const pending = state._pendingSubSymbols || [];
   const ids = pending.map(name => state.symbolNameMap[name]).filter(id => id);
+  addLog(`Mapped ${ids.length} of ${pending.length} pending symbols to IDs`, 'blue');
   if (ids.length > 0) {
     const msg = {
       clientMsgId: nextMsgId(),
