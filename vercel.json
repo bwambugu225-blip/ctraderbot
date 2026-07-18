@@ -1,9 +1,11 @@
 {
   "version": 2,
   "builds": [
+    { "src": "api/token.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/api/token", "dest": "/api/token.js" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

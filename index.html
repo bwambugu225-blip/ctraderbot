@@ -998,24 +998,37 @@ function receiveOAuthCode(code) {
 }
 
 function exchangeAuthCode() {
-  let code = _oauthPopupCode || document.getElementById('oauthRedirectInput').value.trim();
-  if (!code) { addLog('No authorization code found', 'red'); return; }
+  let raw = _oauthPopupCode || document.getElementById('oauthRedirectInput').value.trim();
+  if (!raw) { addLog('No authorization code found', 'red'); return; }
+
+  // Extract code from URL if user pasted the full redirect URL
+  let code = raw;
+  try {
+    const parsed = new URL(raw);
+    const c = parsed.searchParams.get('code');
+    if (c) code = c;
+  } catch {}
 
   const redirectUri = document.getElementById('connRedirectUri').value.trim();
   addLog('Exchanging authorization code for access token...', 'blue');
 
-  fetch('https://openapi.ctrader.com/apps/token', {
+  const tokenBody = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: code,
+    client_id: CREDENTIALS.clientId,
+    client_secret: CREDENTIALS.clientSecret,
+    redirect_uri: redirectUri,
+  });
+
+  fetch('/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: code,
-      client_id: CREDENTIALS.clientId,
-      client_secret: CREDENTIALS.clientSecret,
-      redirect_uri: redirectUri,
-    }),
+    body: tokenBody,
   })
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+    return r.json();
+  })
   .then(data => {
     if (data.errorCode) {
       addLog('OAuth error: ' + (data.description || data.errorCode), 'red');
@@ -1024,7 +1037,7 @@ function exchangeAuthCode() {
     const token = data.accessToken;
     if (token) {
       document.getElementById('connAccessToken').value = token;
-      addLog('✓ Access token obtained! Expires in: ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
+      addLog('✓ Access token obtained! Expires in ' + (data.expiresIn ? Math.round(data.expiresIn/86400) + ' days' : '30 days'), 'green');
       if (data.refreshToken) {
         localStorage.setItem('ctrader_refresh', data.refreshToken);
         addLog('Refresh token saved', 'green');
@@ -1036,7 +1049,13 @@ function exchangeAuthCode() {
       addLog('Unexpected response: ' + JSON.stringify(data), 'yellow');
     }
   })
-  .catch(err => addLog('Token exchange failed: ' + err.message, 'red'))
+  .catch(err => {
+    addLog('Token exchange failed: ' + err.message, 'red');
+    if (err.message.includes('Failed to fetch')) {
+      addLog('This is likely a CORS issue. Try using the Vercel serverless proxy instead.', 'yellow');
+      addLog('Click "Deploy proxy" or paste the token manually if you have one.', 'yellow');
+    }
+  })
   .finally(() => { _oauthPopupCode = null; });
 }
 
@@ -1048,7 +1067,7 @@ function refreshAccessToken() {
   }
   const redirectUri = document.getElementById('connRedirectUri').value.trim();
   addLog('Refreshing access token...', 'blue');
-  return fetch('https://openapi.ctrader.com/apps/token', {
+  return fetch('/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
