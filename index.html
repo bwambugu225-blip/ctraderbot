@@ -1292,6 +1292,7 @@ function handleMessage(data) {
       case PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES:
         const accounts = payload.ctidTraderAccount || [];
         const sel = document.getElementById('connAccountId');
+        const prevVal = sel.value;
         sel.innerHTML = '';
         if (accounts.length === 0) {
           sel.innerHTML = '<option value="">No accounts found</option>';
@@ -1311,12 +1312,9 @@ function handleMessage(data) {
         });
         // Store for env auto-switch on selection change
         window._allAccounts = accounts;
-        // Preserve user's selection if still valid, else auto-select
-        const currentVal = sel.value;
-        const stillValid = currentVal && accounts.some(a => a.ctidTraderAccountId == currentVal);
-        if (!stillValid) {
-          sel.value = accounts[0].ctidTraderAccountId;
-        }
+        // Restore user's selection if still valid, else auto-select
+        const stillValid = prevVal && accounts.some(a => a.ctidTraderAccountId == prevVal);
+        sel.value = stillValid ? prevVal : accounts[0].ctidTraderAccountId;
         const chosen = accounts.find(a => a.ctidTraderAccountId == sel.value) || accounts[0];
         const chosenLive = chosen.isLive === undefined ? (chosen.accountType || '').toLowerCase().includes('live') : chosen.isLive;
         const needEnv = chosenLive ? 'live' : 'demo';
