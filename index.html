@@ -698,8 +698,10 @@ label { display:block; font-size:12px; color:var(--text-secondary); margin-botto
                 </select>
               </div>
               <div class="form-group">
-                <label>Account ID</label>
-                <input type="number" id="connAccountId" placeholder="Auto-detected from access token">
+                <label>Account</label>
+                <select id="connAccountId" style="min-height:38px">
+                  <option value="">— Connect via OAuth to load accounts —</option>
+                </select>
               </div>
             </div>
             <div class="form-row">
@@ -1286,22 +1288,31 @@ function handleMessage(data) {
 
       case PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES:
         const accounts = payload.ctidTraderAccount || [];
-        if (accounts.length > 0) {
-          const acc = accounts[0];
-          const type = acc.accountType || acc.accountTypeName || 'unknown';
-          const isDemo = acc.isDemo || (type && type.toLowerCase().includes('demo'));
-          const currentEnv = document.getElementById('connEnv').value;
-          const needEnv = isDemo ? 'demo' : 'live';
-          addLog(`Found account #${acc.ctidTraderAccountId} (${type}, ${needEnv})`, 'green');
-          document.getElementById('connAccountId').value = acc.ctidTraderAccountId;
-          document.getElementById('connEnv').value = needEnv;
-          if (needEnv !== currentEnv) {
-            addLog(`Environment mismatch (${currentEnv} vs ${needEnv}), reconnecting...`, 'yellow');
-            disconnect();
-            setTimeout(() => toggleConnection(), 500);
-            return;
-          }
+        const sel = document.getElementById('connAccountId');
+        sel.innerHTML = '';
+        if (accounts.length === 0) {
+          sel.innerHTML = '<option value="">No accounts found</option>';
+          addLog('No accounts found for this access token', 'red');
+          break;
         }
+        addLog(`Found ${accounts.length} account(s)`, 'green');
+        accounts.forEach((acc, i) => {
+          const label = acc.accountType || acc.accountTypeName || 'unknown';
+          const isDemo = acc.isDemo || (label && label.toLowerCase().includes('demo'));
+          const env = isDemo ? 'demo' : 'live';
+          const opt = document.createElement('option');
+          opt.value = acc.ctidTraderAccountId;
+          opt.textContent = `#${acc.ctidTraderAccountId} — ${label} (${env})`;
+          sel.appendChild(opt);
+          addLog(`  ${i+1}. #${acc.ctidTraderAccountId} (${label}, ${env})`, 'blue');
+        });
+        // Store for env auto-switch on selection change
+        window._allAccounts = accounts;
+        // Auto-select first account; set env to match it
+        const first = accounts[0];
+        const firstIsDemo = first.isDemo || (first.accountType || '').toLowerCase().includes('demo');
+        sel.value = first.ctidTraderAccountId;
+        document.getElementById('connEnv').value = firstIsDemo ? 'demo' : 'live';
         authenticateAccount();
         break;
 
@@ -2037,6 +2048,21 @@ function clearLogs() {
   const rd = document.getElementById('redirectDisplay');
   if (ri && rd) {
     ri.addEventListener('input', function() { rd.textContent = this.value || 'https://ctraderbot.vercel.app'; });
+  }
+})();
+
+// Account dropdown change: auto-set environment
+(function() {
+  const sel = document.getElementById('connAccountId');
+  if (sel) {
+    sel.addEventListener('change', function() {
+      const accounts = window._allAccounts || [];
+      const pick = accounts.find(a => a.ctidTraderAccountId == this.value);
+      if (pick) {
+        const isDemo = pick.isDemo || (pick.accountType || '').toLowerCase().includes('demo');
+        document.getElementById('connEnv').value = isDemo ? 'demo' : 'live';
+      }
+    });
   }
 })();
 
