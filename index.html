@@ -3,1194 +3,266 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>cTrader Terminal — MetaTrader 5 Style</title>
+<title>cTrader Terminal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2322d3ee'/><text x='16' y='22' font-size='16' font-family='Arial' font-weight='800' fill='%2304121f' text-anchor='middle'>cT</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root {
-  --mt5-bg: #1c1c1c;
-  --mt5-panel: #2b2b2b;
-  --mt5-panel-2: #252525;
-  --mt5-border: #3c3c3c;
-  --mt5-border-light: #4c4c4c;
-  --mt5-text: #e0e0e0;
-  --mt5-text-muted: #8c8c8c;
-  --mt5-accent: #007acc;
-  --mt5-accent-hover: #1f91d6;
-  --mt5-green: #00c05a;
-  --mt5-green-dim: rgba(0,192,90,0.15);
-  --mt5-red: #ff3b30;
-  --mt5-red-dim: rgba(255,59,48,0.15);
-  --mt5-active: #3c3c3c;
-  --mt5-hover: #323232;
-  --mt5-chart-bg: #0b0e14;
-}
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { height:100%; }
-body {
-  font-family:'Segoe UI', Tahoma, sans-serif;
-  background:var(--mt5-bg); color:var(--mt5-text);
-  font-size:12px; overflow:hidden; user-select:none;
-  -webkit-tap-highlight-color:transparent;
-}
-::-webkit-scrollbar { width:7px; height:7px; }
-::-webkit-scrollbar-track { background:#1e1e1e; }
-::-webkit-scrollbar-thumb { background:#444; border-radius:3px; }
-::-webkit-scrollbar-thumb:hover { background:#555; }
-
-.mt5-app { display:flex; flex-direction:column; height:100vh; width:100vw; }
-
-/* ── MENU BAR ── */
-.mt5-menubar {
-  background:#202020; height:26px; border-bottom:1px solid var(--mt5-border);
-  display:flex; align-items:center; padding:0 6px; gap:2px; flex-shrink:0; z-index:300;
-}
-.menu-item { position:relative; cursor:pointer; padding:3px 9px; border-radius:2px; color:#c8c8c8; font-size:12px; }
-.menu-item:hover, .menu-item.active { background:var(--mt5-hover); color:#fff; }
-.menu-dropdown {
-  display:none; position:absolute; top:24px; left:0; background:var(--mt5-panel);
-  border:1px solid var(--mt5-border); min-width:200px; z-index:400;
-  box-shadow:0 6px 18px rgba(0,0,0,0.6); padding:4px 0;
-}
-.menu-item.active .menu-dropdown { display:block; }
-.dropdown-row { padding:7px 16px; display:flex; justify-content:space-between; align-items:center; color:#dfdfdf; cursor:pointer; font-size:12px; }
-.dropdown-row:hover { background:var(--mt5-accent); color:#fff; }
-.dropdown-divider { height:1px; background:var(--mt5-border); margin:4px 0; }
-
-/* ── TOOLBAR ── */
-.mt5-toolbar { background:var(--mt5-panel); border-bottom:1px solid var(--mt5-border); display:flex; flex-wrap:wrap; align-items:center; padding:4px 8px; gap:6px; flex-shrink:0; }
-.toolbar-group { display:flex; align-items:center; gap:2px; border-right:1px solid var(--mt5-border); padding-right:8px; }
-.toolbar-group:last-child { border-right:none; }
-.toolbar-btn { background:transparent; border:1px solid transparent; color:#dfdfdf; padding:5px 8px; border-radius:3px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; font-family:inherit; font-size:12px; transition:background .12s; }
-.toolbar-btn:hover { background:var(--mt5-hover); border-color:#555; }
-.toolbar-btn.active { background:var(--mt5-active); border-color:var(--mt5-accent); }
-.algo-btn { background:var(--mt5-red-dim)!important; color:var(--mt5-red)!important; border:1px solid var(--mt5-red)!important; font-weight:600; }
-.algo-btn.running { background:var(--mt5-green-dim)!important; color:var(--mt5-green)!important; border:1px solid var(--mt5-green)!important; }
-.tf-btn { font-weight:600; font-size:11px; min-width:34px; }
-
-/* ── WORKSPACE ── */
-.mt5-workspace { display:flex; flex:1; overflow:hidden; position:relative; }
-
-/* Sidebar */
-.mt5-sidebar { width:250px; background:#202020; border-right:1px solid var(--mt5-border); display:flex; flex-direction:column; flex-shrink:0; z-index:50; }
-.sidebar-panel { display:flex; flex-direction:column; border-bottom:1px solid var(--mt5-border); min-height:0; }
-.sidebar-header { background:#2a2a2a; height:26px; border-bottom:1px solid var(--mt5-border); display:flex; align-items:center; justify-content:space-between; padding:0 8px; font-weight:600; color:#dfdfdf; text-transform:uppercase; font-size:10px; letter-spacing:.3px; flex-shrink:0; }
-.market-watch-container { height:52%; display:flex; flex-direction:column; overflow:hidden; }
-.navigator-container { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-
-.market-watch-wrap { flex:1; overflow-y:auto; }
-.market-watch-table { width:100%; border-collapse:collapse; }
-.market-watch-table th { background:#262626; text-align:left; padding:6px 8px; font-weight:500; border-bottom:1px solid var(--mt5-border); color:var(--mt5-text-muted); position:sticky; top:0; z-index:10; font-size:11px; }
-.market-watch-table td { padding:6px 8px; border-bottom:1px solid #282828; cursor:pointer; font-size:12px; }
-.market-watch-table tr:hover td { background:var(--mt5-hover); }
-.market-watch-table tr.selected td { background:var(--mt5-accent); color:#fff; }
-.price-up { color:var(--mt5-green)!important; }
-.price-down { color:var(--mt5-red)!important; }
-
-.navigator-tree { padding:6px; overflow-y:auto; flex:1; }
-.tree-node { padding:5px 0; cursor:pointer; display:flex; align-items:center; gap:6px; }
-.tree-node:hover { color:#fff; }
-.tree-sub { padding-left:16px; display:flex; flex-direction:column; }
-.tree-sub-node { padding:4px 0; color:var(--mt5-text-muted); cursor:pointer; display:flex; align-items:center; gap:6px; }
-.tree-sub-node:hover { color:#fff; }
-.ea-active { color:var(--mt5-green)!important; font-weight:600; }
-
-/* Main pane */
-.mt5-main { flex:1; display:flex; flex-direction:column; background:var(--mt5-bg); overflow:hidden; min-width:0; }
-.mt5-chart-area { flex:1; position:relative; background:var(--mt5-chart-bg); display:flex; flex-direction:column; min-height:200px; }
-#chartContainer { flex:1; width:100%; height:100%; }
-#rsiContainer { height:120px; width:100%; border-top:1px solid var(--mt5-border); background:var(--mt5-chart-bg); display:none; }
-
-.one-click-panel { position:absolute; top:10px; left:10px; z-index:50; background:rgba(30,30,30,.88); border:1px solid var(--mt5-border); border-radius:4px; padding:6px; display:flex; flex-direction:column; gap:4px; backdrop-filter:blur(4px); width:200px; }
-.oct-header { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--mt5-text-muted); font-weight:600; }
-.oct-body { display:flex; gap:4px; align-items:center; }
-.oct-btn { flex:1; height:40px; border-radius:3px; border:none; cursor:pointer; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff; font-weight:700; transition:opacity .15s; }
-.oct-btn:hover { opacity:.9; }
-.oct-btn.buy { background:var(--mt5-green); }
-.oct-btn.sell { background:var(--mt5-red); }
-.oct-label { font-size:9px; text-transform:uppercase; font-weight:500; opacity:.85; }
-.oct-price { font-size:14px; letter-spacing:-.3px; }
-.oct-vol { width:52px; height:40px; background:#151515; border:1px solid var(--mt5-border); color:#fff; text-align:center; font-weight:700; font-size:12px; outline:none; }
-
-/* Toolbox */
-.mt5-toolbox { height:230px; background:#202020; border-top:1px solid var(--mt5-border); display:flex; flex-direction:column; flex-shrink:0; }
-.toolbox-tabs { background:#262626; height:26px; border-bottom:1px solid var(--mt5-border); display:flex; align-items:center; padding:0 4px; flex-shrink:0; }
-.toolbox-tab { padding:5px 14px; cursor:pointer; color:var(--mt5-text-muted); font-weight:500; border-right:1px solid #1c1c1c; display:flex; align-items:center; gap:6px; font-size:12px; }
-.toolbox-tab:hover { background:var(--mt5-hover); color:#fff; }
-.toolbox-tab.active { background:var(--mt5-panel); color:#fff; border-top:2px solid var(--mt5-accent); height:26px; }
-.toolbox-content { flex:1; overflow-y:auto; background:var(--mt5-panel); }
-.toolbox-pane { display:none; width:100%; height:100%; }
-.toolbox-pane.active { display:block; }
-.toolbox-table-wrap { width:100%; height:100%; overflow:auto; }
-.toolbox-table { width:100%; border-collapse:collapse; white-space:nowrap; }
-.toolbox-table th { background:#232323; text-align:left; padding:6px 10px; font-weight:500; border-bottom:1px solid var(--mt5-border); color:var(--mt5-text-muted); position:sticky; top:0; font-size:11px; }
-.toolbox-table td { padding:6px 10px; border-bottom:1px solid #333; font-size:12px; }
-.toolbox-table tr:hover td { background:var(--mt5-hover); }
-.summary-row { background:#252525; font-weight:600; }
-.summary-row td { border-top:1px solid var(--mt5-border); }
-
-.logs-terminal { width:100%; height:100%; padding:8px; font-family:'Courier New',monospace; font-size:11px; overflow-y:auto; background:#171717; color:#e0e0e0; }
-.log-line { margin-bottom:3px; display:flex; gap:8px; }
-.log-line .time { color:var(--mt5-text-muted); flex-shrink:0; }
-.log-line .msg { word-break:break-all; }
-.log-line .msg.success { color:var(--mt5-green); }
-.log-line .msg.error { color:var(--mt5-red); }
-.log-line .msg.info { color:var(--mt5-accent-hover); }
-
-/* Status bar */
-.mt5-statusbar { height:22px; background:#181818; border-top:1px solid var(--mt5-border); display:flex; justify-content:space-between; align-items:center; padding:0 10px; font-size:11px; color:var(--mt5-text-muted); flex-shrink:0; }
-.status-left, .status-right { display:flex; align-items:center; gap:12px; }
-.conn-indicator { display:flex; align-items:center; gap:6px; font-weight:600; }
-.conn-dot { width:8px; height:8px; border-radius:50%; background:var(--mt5-red); }
-.conn-indicator.connected .conn-dot { background:var(--mt5-green); }
-.conn-indicator.connecting .conn-dot { background:#ffc107; }
-
-/* Modals */
-.mt5-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; padding:16px; }
-.mt5-overlay.open { display:flex; }
-.mt5-modal { background:var(--mt5-panel); border:1px solid var(--mt5-border); width:100%; max-width:480px; border-radius:4px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.6); max-height:92vh; overflow-y:auto; }
-.modal-header { background:#222; padding:10px 14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--mt5-border); }
-.modal-close { cursor:pointer; color:var(--mt5-text-muted); font-size:16px; }
-.modal-close:hover { color:#fff; }
-.modal-body { padding:16px; }
-.form-group { margin-bottom:12px; }
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-label { display:block; font-size:11px; color:var(--mt5-text-muted); margin-bottom:4px; }
-input, select { width:100%; background:#181818; border:1px solid var(--mt5-border); color:#fff; padding:8px 10px; font-size:12px; font-family:inherit; outline:none; border-radius:2px; }
-input:focus, select:focus { border-color:var(--mt5-accent); }
-.btn-primary { background:var(--mt5-accent); color:#fff; border:none; padding:10px 16px; cursor:pointer; font-weight:600; font-family:inherit; width:100%; text-align:center; border-radius:2px; }
-.btn-primary:hover { background:var(--mt5-accent-hover); }
-.btn-secondary { background:#3c3c3c; color:#fff; border:none; padding:10px 16px; cursor:pointer; font-weight:600; font-family:inherit; width:100%; text-align:center; border-radius:2px; }
-.btn-secondary:hover { background:#4a4a4a; }
-.order-action-row { display:flex; gap:12px; margin-top:16px; }
-.btn-buy { background:var(--mt5-green); color:#fff; flex:1; padding:12px; border:none; cursor:pointer; font-weight:700; font-family:inherit; border-radius:2px; }
-.btn-sell { background:var(--mt5-red); color:#fff; flex:1; padding:12px; border:none; cursor:pointer; font-weight:700; font-family:inherit; border-radius:2px; }
-.btn-buy:hover, .btn-sell:hover { opacity:.9; }
-.conn-status { display:flex; align-items:center; gap:8px; padding:10px 14px; border-radius:4px; margin-bottom:14px; font-size:12px; }
-.conn-status.offline { background:var(--mt5-red-dim); color:var(--mt5-red); }
-.conn-status.connecting { background:rgba(255,193,7,.12); color:#ffc107; }
-.conn-status.online { background:var(--mt5-green-dim); color:var(--mt5-green); }
-
-/* ===== MOBILE-ONLY ELEMENTS (hidden on desktop) ===== */
-.mt5-mobile-tabbar, .mt5-sidebar-overlay { display:none; }
-
-/* ============================================================
-   RESPONSIVE: TABLET (769px - 1099px)
-   ============================================================ */
-@media (max-width:1099px) {
-  .mt5-sidebar { width:210px; }
-  .mt5-toolbox { height:200px; }
-}
-
-/* ============================================================
-   RESPONSIVE: MOBILE (< 768px) — SEPARATE LAYOUT
-   ============================================================ */
-@media (max-width:767px) {
-  body { overflow:auto; }
-  .mt5-app { height:auto; min-height:100vh; }
-
-  .mt5-menubar { height:42px; padding:0 10px; gap:4px; overflow-x:auto; }
-  .menu-item { padding:8px 10px; font-size:13px; white-space:nowrap; }
-
-  .mt5-toolbar { padding:6px 8px; gap:5px; overflow-x:auto; }
-  .toolbar-group { border-right:none; padding-right:0; flex-shrink:0; }
-  .toolbar-btn { padding:9px 11px; font-size:13px; min-height:38px; }
-  .tf-btn { min-width:40px; }
-
-  .mt5-workspace { flex-direction:column; overflow:visible; }
-
-  /* Sidebar off-canvas drawer */
-  .mt5-sidebar {
-    position:fixed; top:0; bottom:0; left:0; width:82%; max-width:320px;
-    z-index:1001; transform:translateX(-100%); transition:transform .25s ease;
-    box-shadow:4px 0 20px rgba(0,0,0,.6);
-  }
-  .mt5-sidebar.open { transform:translateX(0); }
-  .market-watch-container { height:48%; }
-  .market-watch-table th, .market-watch-table td { padding:9px 8px; font-size:13px; }
-
-  .mt5-main { width:100%; }
-  .mt5-chart-area { height:48vh; min-height:280px; }
-  #rsiContainer { height:90px; }
-
-  .one-click-panel { width:170px; top:6px; left:6px; padding:4px; }
-  .oct-btn { height:36px; }
-  .oct-price { font-size:12px; }
-  .oct-vol { height:36px; width:46px; }
-
-  .mt5-toolbox { height:46vh; min-height:240px; margin-bottom:60px; }
-  .toolbox-table th, .toolbox-table td { padding:9px 8px; font-size:12px; }
-
-  .mt5-statusbar { height:30px; font-size:11px; padding:0 8px; }
-
-  .mt5-modal { max-width:100%; }
-  .form-row { grid-template-columns:1fr; gap:10px; }
-  input, select { padding:11px 12px; font-size:15px; }
-  .btn-primary, .btn-secondary { padding:13px; font-size:15px; }
-
-  /* Bottom tab bar */
-  .mt5-mobile-tabbar {
-    display:flex; position:fixed; bottom:0; left:0; right:0; height:58px;
-    background:#202020; border-top:1px solid var(--mt5-border); z-index:1002;
-    padding-bottom:env(safe-area-inset-bottom,0);
-  }
-  .mt5-mobile-tabbar .mtab {
-    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:2px; color:var(--mt5-text-muted); font-size:9px; cursor:pointer;
-  }
-  .mt5-mobile-tabbar .mtab .ic { font-size:19px; }
-  .mt5-mobile-tabbar .mtab.active { color:var(--mt5-accent); }
-
-  .mt5-sidebar-overlay {
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
-  }
-  .mt5-sidebar-overlay.open { display:block; }
-}
-@media (min-width:768px) {
-  .mt5-mobile-tabbar, .mt5-sidebar-overlay { display:none!important; }
-}
-@media (max-width:479px) {
-  .mt5-chart-area { height:42vh; min-height:240px; }
-  .mt5-toolbox { height:42vh; min-height:220px; }
-  .one-click-panel { width:150px; }
-}
-</style>
 </head>
 <body>
 
-<div class="mt5-app">
-  <!-- ── MENU BAR ── -->
-  <div class="mt5-menubar">
-    <div class="menu-item" onclick="toggleMenu(this)">File
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="openModal('connectionModal')">Connect to Account...</div>
-        <div class="dropdown-row" onclick="startOAuth()">🔑 Authorize with cTrader...</div>
-        <div class="dropdown-divider"></div>
-        <div class="dropdown-row" onclick="window.close()">Exit</div>
-      </div>
-    </div>
-    <div class="menu-item" onclick="toggleMenu(this)">View
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="toggleSidebarSection('marketWatch')">Market Watch</div>
-        <div class="dropdown-row" onclick="toggleSidebarSection('navigator')">Navigator</div>
-        <div class="dropdown-divider"></div>
-        <div class="dropdown-row" onclick="toggleGrid()">Chart Grid</div>
-      </div>
-    </div>
-    <div class="menu-item" onclick="toggleMenu(this)">Insert
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="activateDrawingTool('horiz')">Horizontal Line</div>
-        <div class="dropdown-row" onclick="activateDrawingTool('trend')">Trendline</div>
-        <div class="dropdown-divider"></div>
-        <div class="dropdown-row" onclick="toggleIndicator('ema9')">EMA (9)</div>
-        <div class="dropdown-row" onclick="toggleIndicator('ema21')">EMA (21)</div>
-        <div class="dropdown-row" onclick="toggleIndicator('sma50')">SMA (50)</div>
-        <div class="dropdown-row" onclick="toggleIndicator('bb')">Bollinger Bands</div>
-        <div class="dropdown-row" onclick="toggleRsiPane()">RSI Oscillator</div>
-      </div>
-    </div>
-    <div class="menu-item" onclick="toggleMenu(this)">Charts
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="setChartType('bars')">Bar Chart</div>
-        <div class="dropdown-row" onclick="setChartType('candles')">Candlesticks</div>
-        <div class="dropdown-row" onclick="setChartType('line')">Line</div>
-        <div class="dropdown-divider"></div>
-        <div class="dropdown-row" onclick="zoomChart(1)">Zoom In</div>
-        <div class="dropdown-row" onclick="zoomChart(-1)">Zoom Out</div>
-      </div>
-    </div>
-    <div class="menu-item" onclick="toggleMenu(this)">Tools
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="openModal('orderModal')">New Order...</div>
-        <div class="dropdown-row" onclick="toggleBot()">Toggle Expert Advisor</div>
-        <div class="dropdown-divider"></div>
-        <div class="dropdown-row" onclick="openModal('riskModal')">EA Risk Settings...</div>
-      </div>
-    </div>
-    <div class="menu-item" onclick="toggleMenu(this)">Help
-      <div class="menu-dropdown">
-        <div class="dropdown-row" onclick="addJournalLog('cTrader Terminal v3.0 — MetaTrader 5 Edition','info')">About</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── TOOLBAR ── -->
-  <div class="mt5-toolbar">
-    <div class="toolbar-group">
-      <button class="toolbar-btn" onclick="openModal('orderModal')">➕ <strong style="color:var(--mt5-accent-hover)">New Order</strong></button>
-      <button class="toolbar-btn algo-btn" id="algoTradingBtn" onclick="toggleBot()">🔴 Algo Trading</button>
-    </div>
-    <div class="toolbar-group">
-      <button class="toolbar-btn" id="chartTypeBars" onclick="setChartType('bars')">📊</button>
-      <button class="toolbar-btn active" id="chartTypeCandles" onclick="setChartType('candles')">🕯️</button>
-      <button class="toolbar-btn" id="chartTypeLine" onclick="setChartType('line')">📈</button>
-    </div>
-    <div class="toolbar-group">
-      <button class="toolbar-btn" onclick="zoomChart(1)">🔍➕</button>
-      <button class="toolbar-btn" onclick="zoomChart(-1)">🔍➖</button>
-      <button class="toolbar-btn" id="gridToggleBtn" onclick="toggleGrid()" style="font-size:13px;font-weight:700">#</button>
-    </div>
-    <div class="toolbar-group">
-      <button class="toolbar-btn" id="toolCursor" onclick="activateDrawingTool('cursor')">⌖</button>
-      <button class="toolbar-btn" id="toolCrosshair" onclick="activateDrawingTool('crosshair')">✛</button>
-      <button class="toolbar-btn" id="toolHoriz" onclick="activateDrawingTool('horiz')">〰</button>
-      <button class="toolbar-btn" id="toolTrend" onclick="activateDrawingTool('trend')">╱</button>
-    </div>
-    <div class="toolbar-group">
-      <button class="toolbar-btn tf-btn" id="tfM1" onclick="setChartTF('M1')">M1</button>
-      <button class="toolbar-btn tf-btn" id="tfM5" onclick="setChartTF('M5')">M5</button>
-      <button class="toolbar-btn tf-btn active" id="tfM15" onclick="setChartTF('M15')">M15</button>
-      <button class="toolbar-btn tf-btn" id="tfH1" onclick="setChartTF('H1')">H1</button>
-      <button class="toolbar-btn tf-btn" id="tfD1" onclick="setChartTF('D1')">D1</button>
-      <button class="toolbar-btn" style="margin-left:8px" onclick="loadHistory(state._currentSymbol)" title="Import real OHLC (may not work on all demo accounts)">⟳ Load History</button>
-    </div>
-  </div>
-
-  <!-- ── WORKSPACE ── -->
-  <div class="mt5-workspace">
-    <!-- Sidebar -->
-    <div class="mt5-sidebar" id="sidebar">
-      <div class="sidebar-panel market-watch-container" id="marketWatchSection">
-        <div class="sidebar-header">
-          <span>Market Watch</span>
-          <span style="font-weight:normal;font-size:9px;color:var(--mt5-text-muted)" id="mwCount">—</span>
-        </div>
-        <div class="market-watch-wrap">
-          <table class="market-watch-table">
-            <thead><tr><th>Symbol</th><th>Bid</th><th>Ask</th><th style="text-align:right">Spread</th></tr></thead>
-            <tbody id="marketWatchBody">
-              <tr><td colspan="4" style="text-align:center;color:var(--mt5-text-muted);padding:20px;">Connecting to discover symbols...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="sidebar-panel navigator-container" id="navigatorSection">
-        <div class="sidebar-header"><span>Navigator</span></div>
-        <div class="navigator-tree">
-          <div class="tree-node" onclick="toggleFolder('folderAccounts')">📂 Accounts</div>
-          <div class="tree-sub" id="folderAccounts"><div class="tree-sub-node" id="navigatorAccountId"># Not Loaded</div></div>
-          <div class="tree-node" onclick="toggleFolder('folderIndicators')">📂 Indicators</div>
-          <div class="tree-sub" id="folderIndicators">
-            <div class="tree-sub-node" onclick="toggleIndicator('ema9')">📈 EMA (9)</div>
-            <div class="tree-sub-node" onclick="toggleIndicator('ema21')">📈 EMA (21)</div>
-            <div class="tree-sub-node" onclick="toggleIndicator('sma50')">📈 SMA (50)</div>
-            <div class="tree-sub-node" onclick="toggleIndicator('bb')">📊 Bollinger Bands</div>
-            <div class="tree-sub-node" onclick="toggleRsiPane()">📉 RSI Oscillator</div>
-          </div>
-          <div class="tree-node" onclick="toggleFolder('folderEAs')">📂 Expert Advisors</div>
-          <div class="tree-sub" id="folderEAs">
-            <div class="tree-sub-node ea-active" id="navigatorEa" onclick="openModal('riskModal')">🤖 cTrader EA Engine</div>
-          </div>
-        </div>
-      </div>
+<div class="app">
+  <!-- ================= HEADER ================= -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">cT</div>
+      <div class="brand-title">cTrader Terminal<small>Open API v2 · Pro</small></div>
     </div>
 
-    <!-- Main pane -->
-    <div class="mt5-main">
-      <div class="mt5-chart-area">
-        <div class="one-click-panel">
-          <div class="oct-header">
-            <span id="oneClickSymbol">—</span>
-            <span id="oneClickSpread">Spread: —</span>
-          </div>
-          <div class="oct-body">
-            <button class="oct-btn sell" onclick="placeQuickOrder('sell')">
-              <span class="oct-label">Sell</span>
-              <span class="oct-price" id="oneClickBid">—</span>
-            </button>
-            <input type="number" class="oct-vol" id="oneClickVolume" value="0.10" step="0.10" min="0.01" onchange="syncVolumeInputs(this.value)">
-            <button class="oct-btn buy" onclick="placeQuickOrder('buy')">
-              <span class="oct-label">Buy</span>
-              <span class="oct-price" id="oneClickAsk">—</span>
-            </button>
-          </div>
+    <button class="pill" id="connPill" title="Connection status — click to manage">
+      <span class="dot"></span><span class="lbl">Disconnected</span>
+    </button>
+
+    <div class="select-wrap">
+      <select id="accSelect" title="Trading account">
+        <option value="">Select account</option>
+      </select>
+    </div>
+
+    <div class="header-right">
+      <div class="stat-chips">
+        <div class="chip"><div class="k">Balance</div><div class="v" id="hBalance">0.00</div></div>
+        <div class="chip"><div class="k">Equity</div><div class="v" id="hEquity">0.00</div></div>
+        <div class="chip"><div class="k">Margin</div><div class="v" id="hMargin">0.00</div></div>
+      </div>
+      <button class="btn ea-btn" id="eaBtn">○ Start EA</button>
+      <button class="icon-btn" id="settingsBtn" title="Connection settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- ================= WORKSPACE ================= -->
+  <div class="workspace">
+
+    <!-- ---------- Watchlist ---------- -->
+    <aside class="sidebar" id="watchPanel">
+      <div class="panel-head">
+        <span class="panel-title">Market Watch <span id="wlCount" class="count"></span></span>
+      </div>
+      <div class="search">
+        <span class="mag">⌕</span>
+        <input id="wlSearch" type="text" placeholder="Search symbols…" autocomplete="off">
+      </div>
+      <div class="cat-tabs">
+        <button class="cat-tab active" data-cat="All">All</button>
+        <button class="cat-tab" data-cat="Crypto">Crypto</button>
+        <button class="cat-tab" data-cat="Forex">Forex</button>
+        <button class="cat-tab" data-cat="Metals">Metals</button>
+        <button class="cat-tab" data-cat="Indices">Indices</button>
+        <button class="cat-tab" data-cat="Stocks">Stocks</button>
+      </div>
+      <div class="watchlist" id="watchBody">
+        <div class="empty-note">Connect an account to load symbols.</div>
+      </div>
+    </aside>
+
+    <!-- ---------- Center ---------- -->
+    <main class="main">
+      <div class="chart-toolbar">
+        <div class="symbol-badge">
+          <span class="sym" id="chartSymbolName">—</span>
+          <span class="price" id="chartSymbolPrice">—</span>
+          <span class="spr" id="chartSymbolSpr"></span>
+        </div>
+        <span class="sep"></span>
+        <button class="tbtn tf-btn active" data-tf="M1">M1</button>
+        <button class="tbtn tf-btn" data-tf="M5">M5</button>
+        <button class="tbtn tf-btn" data-tf="M15">M15</button>
+        <button class="tbtn tf-btn" data-tf="M30">M30</button>
+        <button class="tbtn tf-btn" data-tf="H1">H1</button>
+        <button class="tbtn tf-btn" data-tf="H4">H4</button>
+        <button class="tbtn tf-btn" data-tf="D1">D1</button>
+        <span class="sep"></span>
+        <button class="tbtn active" id="ct_candles">Candles</button>
+        <button class="tbtn" id="ct_bars">Bars</button>
+        <button class="tbtn" id="ct_line">Line</button>
+        <span class="sep"></span>
+        <button class="tbtn active" id="ind_ema9">EMA9</button>
+        <button class="tbtn active" id="ind_ema21">EMA21</button>
+        <button class="tbtn active" id="ind_bb">BB</button>
+        <button class="tbtn active" id="ind_rsi">RSI</button>
+        <button class="tbtn" id="gridBtn">Grid</button>
+      </div>
+
+      <div class="chart-area">
+        <div class="oct">
+          <button class="oct-btn sell" id="quickSell"><span class="pl">Sell</span><span class="px" id="octBid">—</span></button>
+          <input class="oct-vol" id="quickVol" value="0.10" step="0.01" min="0" title="Volume (lots)">
+          <button class="oct-btn buy" id="quickBuy"><span class="pl">Buy</span><span class="px" id="octAsk">—</span></button>
         </div>
         <div id="chartContainer"></div>
         <div id="rsiContainer"></div>
       </div>
 
-      <div class="mt5-toolbox">
-        <div class="toolbox-tabs">
-          <div class="toolbox-tab active" id="tabTrade" onclick="switchToolboxTab('trade')">💼 Trade</div>
-          <div class="toolbox-tab" id="tabHistory" onclick="switchToolboxTab('history')">📋 History</div>
-          <div class="toolbox-tab" id="tabExperts" onclick="switchToolboxTab('experts')">🧠 Experts</div>
-          <div class="toolbox-tab" id="tabJournal" onclick="switchToolboxTab('journal')">📝 Journal</div>
-          <button class="toolbar-btn" style="margin-left:auto;font-size:11px;padding:2px 8px" onclick="copyLogs()">⧉ Copy Logs</button>
+      <div class="logs">
+        <div class="logs-head">
+          <button class="logs-tab active" data-log="journal">Journal</button>
+          <button class="logs-tab" data-log="ea">Experts / EA</button>
         </div>
-        <div class="toolbox-content">
-          <div class="toolbox-pane active" id="paneTrade">
-            <div class="toolbox-table-wrap">
-              <table class="toolbox-table">
-                <thead><tr>
-                  <th>Order ID</th><th>Time</th><th>Symbol</th><th>Type</th><th>Volume</th>
-                  <th>Price</th><th>S/L</th><th>T/P</th><th>Commission</th><th>Swap</th>
-                  <th style="text-align:right">Profit ($)</th><th>Action</th>
-                </tr></thead>
-                <tbody id="toolboxTradeBody">
-                  <tr><td colspan="12" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">No open positions</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="toolbox-pane" id="paneHistory">
-            <div class="toolbox-table-wrap">
-              <table class="toolbox-table">
-                <thead><tr><th>ID</th><th>Time</th><th>Symbol</th><th>Type</th><th>Volume</th><th>Price</th><th>P&L</th><th>Balance</th></tr></thead>
-                <tbody id="toolboxHistoryBody">
-                  <tr><td colspan="8" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">No trade history loaded</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="toolbox-pane" id="paneExperts">
-            <div class="logs-terminal" id="expertLogContainer">
-              <div class="log-line"><span class="time">[--:--:--]</span><span class="msg info">cTrader EA Engine initialized. Ready for high-confluence trading.</span></div>
-            </div>
-          </div>
-          <div class="toolbox-pane" id="paneJournal">
-            <div class="logs-terminal" id="journalLogContainer">
-              <div class="log-line"><span class="time">[--:--:--]</span><span class="msg">cTrader Terminal loaded successfully.</span></div>
-            </div>
-          </div>
-        </div>
+        <div class="logs-body" id="logJournalWrap"><div id="logJournal"></div></div>
+        <div class="logs-body" id="logEAWrap" style="display:none"><div id="logEA"></div></div>
       </div>
-    </div>
-  </div>
+    </main>
 
-  <!-- Status bar -->
-  <div class="mt5-statusbar">
-    <div class="status-left">
-      <span>For Help, press F1</span>
-      <span style="color:var(--mt5-green);font-weight:600" id="statusBalance">Balance: $0.00</span>
-      <span style="color:var(--mt5-accent-hover)" id="statusCurrentSymbol">No Asset Selected</span>
-      <span id="statusCurrentTf">M15</span>
-    </div>
-    <div class="status-right">
-      <div class="conn-indicator" id="statusConn">
-        <span class="conn-dot"></span>
-        <span id="statusConnText">Disconnected</span>
+    <!-- ---------- Right: trade panel ---------- -->
+    <aside class="trade-panel">
+      <div class="trade-head">
+        <div class="tabs">
+          <button class="tab panel-tab active" data-panel="positions">Positions</button>
+          <button class="tab panel-tab" data-panel="pending">Pending</button>
+          <button class="tab panel-tab" data-panel="history">History</button>
+        </div>
+        <button class="icon-btn" style="margin-left:auto" title="EA settings" onclick="App.openEA()">🤖</button>
       </div>
-    </div>
+
+      <div class="order-entry">
+        <div class="f-row">
+          <div class="f-cell"><label>Symbol</label><select id="ticketSymbol"></select></div>
+          <div class="f-cell"><label>Type</label>
+            <select id="ticketType">
+              <option value="MARKET">Market</option>
+              <option value="LIMIT">Limit</option>
+              <option value="STOP">Stop</option>
+            </select>
+          </div>
+        </div>
+        <div class="f-row">
+          <div class="f-cell"><label>Volume (lots)</label><input type="number" id="ticketVol" value="0.10" step="0.01" min="0"></div>
+          <div class="f-cell"><label>Price (limit/stop)</label><input type="number" id="ticketPrice" placeholder="auto"></div>
+        </div>
+        <div class="f-row">
+          <div class="f-cell"><label>SL (pips)</label><input type="number" id="ticketSL" value="30" step="1" min="0"></div>
+          <div class="f-cell"><label>TP (pips)</label><input type="number" id="ticketTP" value="60" step="1" min="0"></div>
+        </div>
+        <div class="order-actions">
+          <button class="big-btn buy" id="tktBuy"><span class="s">Buy Market</span></button>
+          <button class="big-btn sell" id="tktSell"><span class="s">Sell Market</span></button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat"><div class="k">Balance</div><div class="v" id="stBalance">0.00</div></div>
+        <div class="stat"><div class="k">Equity</div><div class="v" id="stEquity">0.00</div></div>
+        <div class="stat"><div class="k">Margin</div><div class="v" id="stMargin">0.00</div></div>
+        <div class="stat"><div class="k">Margin Lvl</div><div class="v" id="stML">—</div></div>
+        <div class="stat"><div class="k">Float P&L</div><div class="v" id="stFloat">0.00</div></div>
+        <div class="stat"><div class="k">Currency</div><div class="v" id="stCurrency">—</div></div>
+      </div>
+
+      <div class="table-scroll">
+        <div id="panel_positions"><div class="placeholder" id="positionsBody">No open positions</div></div>
+        <div id="panel_pending" style="display:none"><div class="placeholder" id="pendingBody">No pending orders</div></div>
+        <div id="panel_history" style="display:none"><div class="placeholder" id="historyBody">No trade history</div></div>
+      </div>
+
+      <button class="btn block" id="closeAllBtn" style="margin:10px;width:calc(100% - 20px)">Close All Positions</button>
+    </aside>
   </div>
 </div>
 
-<!-- Mobile bottom tab bar -->
-<div class="mt5-sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
-<div class="mt5-mobile-tabbar" id="mobileTabbar">
-  <div class="mtab active" data-view="chart" onclick="showMobileView('chart', this)"><span class="ic">📈</span><span>Chart</span></div>
-  <div class="mtab" data-view="watch" onclick="openMobileSidebar()"><span class="ic">👁️</span><span>Watch</span></div>
-  <div class="mtab" data-view="trade" onclick="showMobileView('trade', this)"><span class="ic">💼</span><span>Trade</span></div>
-  <div class="mtab" data-view="experts" onclick="showMobileView('experts', this)"><span class="ic">🧠</span><span>EA</span></div>
-  <div class="mtab" data-view="menu" onclick="openMobileSidebar()"><span class="ic">⚙️</span><span>Menu</span></div>
-</div>
-
-<!-- ── CONNECTION MODAL ── -->
-<div class="mt5-overlay" id="connectionModal">
-  <div class="mt5-modal">
-    <div class="modal-header"><span>Connect to cTrader OpenAPI</span><span class="modal-close" onclick="closeModal('connectionModal')">✕</span></div>
+<!-- ================= CONNECTION MODAL ================= -->
+<div class="overlay" id="connModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Connection Settings</h3><button class="close-x">✕</button></div>
     <div class="modal-body">
-      <div class="conn-status offline" id="connStatus"><span class="conn-dot"></span><span id="connStatusText">Disconnected</span></div>
-      <div class="form-group">
+      <div class="conn-banner mid" id="connBanner">Not connected</div>
+      <div class="grp">
         <label>Environment</label>
         <select id="connEnv"><option value="demo">Demo Server</option><option value="live">Live Server</option></select>
       </div>
-      <div class="form-group">
-        <label>Select Account</label>
-        <select id="connAccountId"><option value="">— Connect via OAuth First —</option></select>
+      <div class="grp">
+        <label>Redirect URI (OAuth)</label>
+        <input type="text" id="connRedirect" placeholder="https://your-app.vercel.app">
       </div>
-      <div class="form-group">
-        <label>Redirect URI</label>
-        <input type="text" id="connRedirectUri" value="https://ctraderbot.vercel.app">
-      </div>
-      <div class="form-group">
+      <div class="grp">
         <label>Access Token</label>
-        <input type="text" id="connAccessToken" placeholder="Auto-filled via OAuth or paste manually">
+        <input type="text" id="tokInput" placeholder="Auto-filled via OAuth, or paste manually">
       </div>
-      <div style="margin-top:16px;display:flex;gap:10px;">
-        <button class="btn-secondary" onclick="startOAuth()">🔑 Authorize (OAuth 2.0)</button>
-        <button class="btn-primary" id="connectBtn" onclick="toggleConnection()">Connect Account</button>
+      <div class="btn-row">
+        <button class="btn primary" id="oauthBtn">🔑 Authorize with cTrader</button>
+        <button class="btn" id="connectBtn">Connect</button>
       </div>
-      <div style="margin-top:12px;display:flex;gap:6px;">
-        <input type="text" id="oauthRedirectInput" placeholder="Paste callback URL / ?code=... manually" style="flex:1">
-        <button class="btn-primary" style="width:auto;padding:0 14px;" onclick="exchangeAuthCode()">Go</button>
-      </div>
-      <div id="redirectDisplay" style="margin-top:8px;font-size:11px;color:var(--mt5-text-muted);">https://ctraderbot.vercel.app</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── NEW ORDER MODAL ── -->
-<div class="mt5-overlay" id="orderModal">
-  <div class="mt5-modal">
-    <div class="modal-header"><span>Order Ticket</span><span class="modal-close" onclick="closeModal('orderModal')">✕</span></div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group"><label>Symbol</label>
-          <select id="orderSymbol" onchange="onSymbolChange(this.value)"></select>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <div class="grp">
+          <label>Manual callback / ?code= …</label>
+          <div class="f-row">
+            <input type="text" id="cbInput" placeholder="Paste callback URL or code" style="flex:1">
+            <button class="btn" id="cbGoBtn">Go</button>
+          </div>
         </div>
-        <div class="form-group"><label>Type</label>
-          <select id="orderType">
-            <option value="market">Market Execution</option>
-            <option value="limit">Limit Order</option>
-            <option value="stop">Stop Order</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Volume (Lots)</label><input type="number" id="orderVolume" value="0.10" step="0.10" min="0.01"></div>
-        <div class="form-group"><label>Price Offset (pips)</label><input type="number" id="orderPriceOffset" value="0"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Stop Loss (Pips)</label><input type="number" id="orderSL" value="30"></div>
-        <div class="form-group"><label>Take Profit (Pips)</label><input type="number" id="orderTP" value="90"></div>
-      </div>
-      <div class="form-group"><label>Comment</label><input type="text" id="orderComment" value="cTrader Terminal"></div>
-      <div class="order-action-row">
-        <button class="btn-sell" onclick="placeOrder('sell')">▼ Sell Market</button>
-        <button class="btn-buy" onclick="placeOrder('buy')">▲ Buy Market</button>
+        <button class="btn block" id="disconnectBtn" style="margin-top:8px">Disconnect</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── RISK SETTINGS MODAL ── -->
-<div class="mt5-overlay" id="riskModal">
-  <div class="mt5-modal">
-    <div class="modal-header"><span>cTrader EA — Adaptive Risk Settings</span><span class="modal-close" onclick="closeModal('riskModal')">✕</span></div>
+<!-- ================= EA SETTINGS MODAL ================= -->
+<div class="overlay" id="eaModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Expert Advisor — Risk & Strategy</h3><button class="close-x">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label>Volume Management Mode</label>
-        <select id="mmVolumeType" onchange="onMmTypeChange(this.value)">
-          <option value="risk">Adaptive Risk (% of Account)</option>
+      <div class="grp">
+        <label>Volume Management</label>
+        <select id="eaMode">
+          <option value="risk">Adaptive Risk (% of balance)</option>
           <option value="fixed">Fixed Lot Size</option>
         </select>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Adaptive Risk % per Trade</label><input type="number" id="mmRiskPct" value="1.5" step="0.1" min="0.1" max="10"></div>
-        <div class="form-group"><label>Fixed Volume (Lots)</label><input type="number" id="mmFixedVol" value="0.10" step="0.05" min="0.01" disabled></div>
+      <div class="grp-row">
+        <div class="grp"><label>Risk % per trade</label><input type="number" id="eaRisk" step="0.1" min="0.1" value="1.0"></div>
+        <div class="grp"><label>Fixed lots</label><input type="number" id="eaFixedLot" step="0.01" min="0.01" value="0.10"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Maximum Positions</label><input type="number" id="mmMaxPos" value="3" min="1"></div>
-        <div class="form-group"><label>Max Spread (Pips)</label><input type="number" id="mmMaxSpread" value="5" step="0.5"></div>
+      <div class="grp-row">
+        <div class="grp"><label>Max positions</label><input type="number" id="eaMaxPos" min="1" value="3"></div>
+        <div class="grp"><label>Max spread (pips)</label><input type="number" id="eaMaxSpread" step="0.5" min="0" value="5"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>ATR SL Multiplier</label><input type="number" id="eaAtrMultiplier" value="2.5" step="0.1" min="1"></div>
-        <div class="form-group"><label>Risk : Reward</label><input type="number" id="eaRiskToReward" value="3.0" step="0.5" min="1.5"></div>
+      <div class="grp-row">
+        <div class="grp"><label>ATR × SL multiplier</label><input type="number" id="eaAtrMult" step="0.1" min="1" value="2.5"></div>
+        <div class="grp"><label>Risk : Reward</label><input type="number" id="eaRR" step="0.5" min="1" value="3"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Trailing Trigger (Pips)</label><input type="number" id="trailTrigger" value="40"></div>
-        <div class="form-group"><label>Trailing Distance (Pips)</label><input type="number" id="trailDist" value="20"></div>
+      <div class="switch-row">
+        <div><div class="l">Trailing Stop</div><div class="d">Locks profit once the trigger pips are reached.</div></div>
+        <div class="switch" id="eaTrail"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Break-Even Trigger (Pips)</label><input type="number" id="beTrigger" value="30"></div>
-        <div class="form-group"><label>Break-Even Lock (Pips)</label><input type="number" id="beLock" value="2"></div>
+      <div class="grp-row">
+        <div class="grp"><label>Trail trigger (pips)</label><input type="number" id="eaTrailTrigger" value="40"></div>
+        <div class="grp"><label>Trail distance (pips)</label><input type="number" id="eaTrailDist" value="20"></div>
       </div>
-      <div class="form-row" style="margin-top:10px;">
-        <div class="form-group"><label>Enable Trailing Stop</label><input type="checkbox" id="trailingToggle" style="width:auto"></div>
-        <div class="form-group"><label>Enable Break Even</label><input type="checkbox" id="beToggle" style="width:auto"></div>
+      <div class="switch-row">
+        <div><div class="l">Break Even</div><div class="d">Moves SL to entry + lock once the trigger pips are reached.</div></div>
+        <div class="switch" id="eaBE"></div>
       </div>
-      <div style="margin-top:14px;"><button class="btn-primary" onclick="saveRiskSettings()">Save Risk Configurations</button></div>
+      <div class="grp-row">
+        <div class="grp"><label>BE trigger (pips)</label><input type="number" id="eaBeTrigger" value="30"></div>
+        <div class="grp"><label>BE lock (pips)</label><input type="number" id="eaBeLock" value="2"></div>
+      </div>
+      <div class="grp-row">
+        <div class="grp"><label>Daily loss limit ($, 0 = off)</label><input type="number" id="eaMaxLoss" value="0"></div>
+        <div class="grp"><label>Signal cooldown (sec)</label><input type="number" id="eaCooldown" min="5" value="60"></div>
+      </div>
+      <div class="switch-row">
+        <div><div class="l">Trade only the selected symbol</div><div class="d">When off, the EA scans every subscribed symbol.</div></div>
+        <input type="checkbox" id="eaOnlyCurrent" style="transform:scale(1.3)">
+      </div>
+      <div style="margin-top:16px"><button class="btn primary block" id="eaSaveBtn">Save EA Settings</button></div>
     </div>
   </div>
 </div>
 
-<script>
-// ============================================================
-//  PROTO PAYLOAD TYPES (cTrader Open API)
-// ============================================================
-const PAYLOAD = {
-  APPLICATION_AUTH_REQ: 2100, APPLICATION_AUTH_RES: 2101,
-  ACCOUNT_AUTH_REQ: 2102, ACCOUNT_AUTH_RES: 2103,
-  NEW_ORDER_REQ: 2106, CLOSE_POSITION_REQ: 2111, CANCEL_ORDER_REQ: 2108,
-  AMEND_POSITION_SLTP_REQ: 2110,
-  SYMBOLS_LIST_REQ: 2114, SYMBOLS_LIST_RES: 2115, SYMBOL_BY_ID_REQ: 2116, SYMBOL_BY_ID_RES: 2117,
-  SUBSCRIBE_SPOTS_REQ: 2127, SUBSCRIBE_SPOTS_RES: 2128,
-  SPOT_EVENT: 2131, EXECUTION_EVENT: 2126,
-  TRADER_REQ: 2121, TRADER_RES: 2122, TRADER_UPDATE_EVENT: 2123,
-  ORDER_LIST_REQ: 2175, ORDER_LIST_RES: 2176,
-  ERROR_RES: 2142, MARGIN_CHANGED_EVENT: 2141, CLIENT_DISCONNECT_EVENT: 2148,
-  GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ: 2149, GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: 2150,
-  GET_TICK_DATA_REQ: 2574, GET_TICK_DATA_RES: 2575,
-  GET_TRENDBARS_REQ: 2132, GET_TRENDBARS_RES: 2133,
-  ORDER_ERROR_EVENT: 2135,
-};
+<div class="toasts" id="toasts"></div>
 
-// ============================================================
-//  STATE
-// ============================================================
-const state = {
-  connected:false, connecting:false, botRunning:false,
-  balance:0, equity:0, margin:0, freeMargin:0,
-  positions:[], pendingOrders:[], trades:0, wins:0, dailyPnl:0,
-  symbolIdMap:{}, symbolNameMap:{}, _symDetails:{}, currentSymbolId:null, subscribedSymbols:[],
-  _currentSymbol:null, _currentTF:'M15', _chartType:'candles', _liveBar:null, _histTimer:null,
-  _gridVisible:true, _activeDrawingTool:'cursor',
-};
-
-let msgIdCounter=0, ws=null, heartbeatInterval=null;
-let chart=null, candleSeries=null, barSeries=null, lineSeries=null;
-let ema9Line=null, ema21Line=null, sma50Line=null, bbUpper=null, bbLower=null, bbBasis=null;
-let rsiChart=null, rsiSeries=null;
-let ohlcHistory={};
-const activeIndicators={ema9:true, ema21:true, sma50:false, bb:true, rsi:true};
-const eaRiskSettings={volumeMode:'risk',riskPct:1.5,fixedVol:0.10,maxPos:3,maxSpread:5.0,atrMultiplier:2.5,riskToReward:3.0,enableTrailing:true,enableBE:true,trailTrigger:40,trailDist:20,beTrigger:30,beLock:2};
-
-// ============================================================
-//  CHART INIT
-// ============================================================
-function initLightweightChart(){
-  const c=document.getElementById('chartContainer'); if(!c) return;
-  c.innerHTML='';
-  chart=LightweightCharts.createChart(c,{
-    width:c.clientWidth, height:c.clientHeight,
-    layout:{backgroundColor:'#0b0e14',textColor:'#8c8c8c',fontSize:11,fontFamily:'Segoe UI,Tahoma,sans-serif'},
-    grid:{vertLines:{color:'#1a1f2c'},horzLines:{color:'#1a1f2c'}},
-    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
-    rightPriceScale:{borderColor:'#2b2b2b'},
-    timeScale:{borderColor:'#2b2b2b',timeVisible:true,secondsVisible:false,rightOffset:4},
-    handleScroll:true, handleScale:true,
-  });
-  window.addEventListener('resize',()=>{ if(chart) chart.resize(c.clientWidth,c.clientHeight); if(rsiChart){const r=document.getElementById('rsiContainer'); rsiChart.resize(r.clientWidth,r.clientHeight);} });
-  setupChartSeries();
-}
-function setupChartSeries(){
-  if(!chart) return;
-  candleSeries=chart.addCandlestickSeries({upColor:'#00c05a',downColor:'#ff3b30',borderDownColor:'#ff3b30',borderUpColor:'#00c05a',wickDownColor:'#ff3b30',wickUpColor:'#00c05a'});
-  barSeries=chart.addBarSeries({upColor:'#00c05a',downColor:'#ff3b30'});
-  lineSeries=chart.addLineSeries({color:'#007acc',lineWidth:2});
-  setChartType(state._chartType);
-}
-function setChartType(t){
-  state._chartType=t;
-  ['bars','candles','line'].forEach(k=>{const el=document.getElementById('chartType'+k.charAt(0).toUpperCase()+k.slice(1)); if(el) el.classList.toggle('active',k===t);});
-  if(!candleSeries) return;
-  candleSeries.applyOptions({visible:t==='candles'});
-  barSeries.applyOptions({visible:t==='bars'});
-  lineSeries.applyOptions({visible:t==='line'});
-  updateChartData();
-  addJournalLog('Chart type: '+t.toUpperCase(),'info');
-}
-function toggleGrid(){
-  state._gridVisible=!state._gridVisible;
-  const g=state._gridVisible?'#1a1f2c':'transparent';
-  chart.applyOptions({grid:{vertLines:{color:g},horzLines:{color:g}}});
-  document.getElementById('gridToggleBtn').classList.toggle('active',state._gridVisible);
-}
-function setChartTF(tf){
-  state._currentTF=tf;
-  document.getElementById('statusCurrentTf').textContent=tf;
-  ['M1','M5','M15','H1','D1'].forEach(k=>{const el=document.getElementById('tf'+k);if(el)el.classList.toggle('active',k===tf);});
-  if(state._currentSymbol){ ohlcHistory[state._currentSymbol+'_'+tf]=[]; updateChartData(); loadHistory(state._currentSymbol); }
-  addJournalLog('Timeframe: '+tf,'info');
-}
-function getTfSeconds(tf){return {M1:60,M5:300,M15:900,H1:3600,H4:14400,D1:86400}[tf]||900;}
-// Live chart: build the current (forming) OHLC bar from real spot ticks on top of imported history
-function tfBarTime(){
-  const bs=getTfSeconds(state._currentTF);
-  const now=Math.floor(Date.now()/1000);
-  return Math.floor(now/bs)*bs;
-}
-// Build the bar array to render = imported history + the live forming bar (if newer)
-function renderBars(){
-  const key=state._currentSymbol+'_'+state._currentTF;
-  const base=Array.isArray(ohlcHistory[key])?ohlcHistory[key].slice():[];
-  const lb=state._liveBar;
-  if(lb&&lb.time>0){
-    if(base.length&&base[base.length-1].time===lb.time) base[base.length-1]=lb;
-    else if(!base.length||lb.time>base[base.length-1].time) base.push(lb);
-  }
-  return cleanBars(base);
-}
-function updateChartFromPrice(price){
-  if(!price||!state._currentSymbol||!candleSeries) return;
-  const bt=tfBarTime();
-  const bar={time:bt,open:+price.toFixed(5),high:+price.toFixed(5),low:+price.toFixed(5),close:+price.toFixed(5)};
-  const prev=state._liveBar;
-  if(prev&&prev.time===bt){
-    bar.open=prev.open;
-    bar.high=Math.max(prev.high,price);
-    bar.low=Math.min(prev.low,price);
-    bar.close=price;
-  }
-  state._liveBar=bar;
-  candleSeries.update(bar);
-  barSeries.update(bar);
-  lineSeries.update({time:bt,value:price});
-  // Throttle heavy indicator recompute to ~4x/sec to keep UI responsive
-  const now=Date.now(); if(!updateChartFromPrice._t||now-updateChartFromPrice._t>250){updateChartFromPrice._t=now;calculateIndicators(renderBars());}
-}
-function updateChartData(){
-  if(!chart||!state._currentSymbol||!candleSeries) return;
-  const data=renderBars();
-  if(!data.length){candleSeries.setData([]);barSeries.setData([]);lineSeries.setData([]);return;}
-  candleSeries.setData(data); barSeries.setData(data); lineSeries.setData(data.map(d=>({time:d.time,value:d.close})));
-  calculateIndicators(data);
-  if(chart.timeScale) chart.timeScale().fitContent();
-}
-// lightweight-charts requires strictly ascending, unique time values — sanitize
-function cleanBars(data){
-  const seen={},out=[];
-  data.slice().sort((a,b)=>a.time-b.time).forEach(b=>{if(seen[b.time])return;seen[b.time]=1;out.push(b);});
-  return out;
-}
-// Aggregate imported tick data into OHLC bars for the current timeframe (legacy tick endpoint)
-function handleTickData(payload){
-  const ticks=payload.tickData||payload.ticks||payload.data||[];
-  if(!ticks.length){addJournalLog('No history ticks returned.','yellow');return;}
-  const bs=getTfSeconds(state._currentTF);
-  const name=state._currentSymbol, key=name+'_'+state._currentTF;
-  const bars={};
-  ticks.forEach(t=>{
-    const ts=(t.timestamp||t.time||0)/1000; if(!ts) return;
-    const bt=Math.floor(ts/bs)*bs;
-    const bid=(t.bid||0)/100000, ask=(t.ask||0)/100000, p=(bid+ask)/2||bid||ask||(t.last||0)/100000;
-    if(!p) return;
-    if(!bars[bt]) bars[bt]={time:bt,open:p,high:p,low:p,close:p};
-    const b=bars[bt];
-    b.high=Math.max(b.high,p); b.low=Math.min(b.low,p); b.close=p;
-  });
-  const arr=Object.values(bars).sort((a,b)=>a.time-b.time);
-  if(arr.length){ ohlcHistory[key]=arr; addJournalLog('Imported '+arr.length+' historical bars for '+name,'green'); updateChartData(); }
-  else addJournalLog('History ticks present but no bars formed.','yellow');
-}
-// cTrader trendbar period enum: M1=1,M2=2,M3=3,M4=4,M5=5,M10=6,M15=7,M30=8,H1=9,H4=10,D1=11,W1=12,MN1=13
-function tfToPeriod(tf){return {M1:1,M5:5,M15:7,H1:9,D1:11}[tf]||7;}
-// Real historical OHLC imported from cTrader via ProtoOAGetTrendbarsRes
-function handleTrendbars(payload){
-  const bars=payload.trendbar||payload.trendbars||payload.bars||[];
-  if(!bars.length){addJournalLog('cTrader returned no history — using market data.','yellow');seedExternalHistory(state._currentSymbol, state._currentTF);return;}
-  const name=state._currentSymbol, key=name+'_'+state._currentTF;
-  const div=Math.pow(10, (state._symDetails[name]&&state._symDetails[name].digits)||5);
-  const arr=bars.map(b=>{
-    // cTrader trendbar timestamp is in MINUTES -> convert to seconds for lightweight-charts
-    const mins=b.utcTimestampInMinutes!=null?b.utcTimestampInMinutes:(b.utcTimestamp||Math.floor(Date.now()/60000));
-    const t=(mins>1e11?Math.floor(mins/60):mins)*60;
-    return {
-      time:t,
-      open:+(b.open||0)/div,
-      high:+(b.high||0)/div,
-      low:+(b.low||0)/div,
-      close:+(b.close||0)/div
-    };
-  }).filter(b=>b.close>0).sort((a,b)=>a.time-b.time);
-  if(arr.length){
-    ohlcHistory[key]=arr;
-    state._liveBar=null; // history replaces any forming bar; live will resume on next tick
-    addJournalLog('Imported '+arr.length+' bars from cTrader for '+name,'green');
-    updateChartData();
-  } else {
-    addJournalLog('Trendbars present but unreadable.','yellow');
-  }
-}
-function calcEMA(d,p){const e=[];if(!d.length)return e;const k=2/(p+1);let pe=d[0].close;e.push({time:d[0].time,value:pe});for(let i=1;i<d.length;i++){const v=d[i].close*k+pe*(1-k);e.push({time:d[i].time,value:v});pe=v;}return e;}
-function calcSMA(d,p){const s=[];for(let i=p-1;i<d.length;i++){let sum=0;for(let j=0;j<p;j++)sum+=d[i-j].close;s.push({time:d[i].time,value:sum/p});}return s;}
-function calcBB(d,p,m){const b={basis:[],upper:[],lower:[]};for(let i=p-1;i<d.length;i++){let s=0;for(let j=0;j<p;j++)s+=d[i-j].close;const a=s/p;let v=0;for(let j=0;j<p;j++)v+=Math.pow(d[i-j].close-a,2);const sd=Math.sqrt(v/p);b.basis.push({time:d[i].time,value:a});b.upper.push({time:d[i].time,value:a+m*sd});b.lower.push({time:d[i].time,value:a-m*sd});}return b;}
-function calcRSI(d,p){const r=[];if(d.length<=p)return r;let ag=0,al=0;for(let i=1;i<=p;i++){const diff=d[i].close-d[i-1].close;if(diff>0)ag+=diff;else al+=Math.abs(diff);}ag/=p;al/=p;let rs=al===0?100:ag/al;r.push({time:d[p].time,value:100-100/(1+rs)});for(let i=p+1;i<d.length;i++){const diff=d[i].close-d[i-1].close,g=diff>0?diff:0,l=diff<0?Math.abs(diff):0;ag=(ag*(p-1)+g)/p;al=(al*(p-1)+l)/p;rs=al===0?100:ag/al;r.push({time:d[i].time,value:100-100/(1+rs)});}return r;}
-function calculateIndicators(data){
-  if(!chart||!data.length) return;
-  if(activeIndicators.ema9){if(!ema9Line)ema9Line=chart.addLineSeries({color:'#29b6f6',lineWidth:1.5,title:'EMA9'});ema9Line.setData(calcEMA(data,9));}else if(ema9Line){chart.removeSeries(ema9Line);ema9Line=null;}
-  if(activeIndicators.ema21){if(!ema21Line)ema21Line=chart.addLineSeries({color:'#ff9800',lineWidth:1.5,title:'EMA21'});ema21Line.setData(calcEMA(data,21));}else if(ema21Line){chart.removeSeries(ema21Line);ema21Line=null;}
-  if(activeIndicators.sma50){if(!sma50Line)sma50Line=chart.addLineSeries({color:'#4caf50',lineWidth:1.5,title:'SMA50'});sma50Line.setData(calcSMA(data,50));}else if(sma50Line){chart.removeSeries(sma50Line);sma50Line=null;}
-  if(activeIndicators.bb){if(!bbBasis){bbBasis=chart.addLineSeries({color:'#78909c',lineWidth:1});bbUpper=chart.addLineSeries({color:'#78909c',lineWidth:1});bbLower=chart.addLineSeries({color:'#78909c',lineWidth:1});}const bb=calcBB(data,20,2);bbBasis.setData(bb.basis);bbUpper.setData(bb.upper);bbLower.setData(bb.lower);}else if(bbBasis){chart.removeSeries(bbBasis);chart.removeSeries(bbUpper);chart.removeSeries(bbLower);bbBasis=bbUpper=bbLower=null;}
-  const rc=document.getElementById('rsiContainer');
-  if(activeIndicators.rsi){rc.style.display='block';if(!rsiChart){rsiChart=LightweightCharts.createChart(rc,{width:rc.clientWidth,height:rc.clientHeight,layout:{backgroundColor:'#0b0e14',textColor:'#8c8c8c',fontSize:10},grid:{vertLines:{visible:false},horzLines:{color:'#1f2430'}},rightPriceScale:{borderColor:'#2b2b2b'},timeScale:{visible:false}});rsiSeries=rsiChart.addLineSeries({color:'#ab47bc',lineWidth:1.5});const up=rsiChart.addLineSeries({color:'#ff3b30',lineWidth:0.8}),lo=rsiChart.addLineSeries({color:'#00c05a',lineWidth:0.8}),mi=rsiChart.addLineSeries({color:'#8c8c8c',lineWidth:0.5,lineStyle:LightweightCharts.LineStyle.Dashed});setTimeout(()=>{const t=data.map(d=>d.time);if(t.length){up.setData(t.map(x=>({time:x,value:70})));lo.setData(t.map(x=>({time:x,value:30})));mi.setData(t.map(x=>({time:x,value:50})));}},100);}rsiSeries.setData(calcRSI(data,14));}
-  else{rc.style.display='none';if(rsiChart){rsiChart=null;rsiSeries=null;rc.innerHTML='';}}
-}
-function toggleIndicator(i){activeIndicators[i]=!activeIndicators[i];addJournalLog('Indicator '+i.toUpperCase()+': '+(activeIndicators[i]?'ON':'OFF'));updateChartData();}
-function toggleRsiPane(){activeIndicators.rsi=!activeIndicators.rsi;addJournalLog('RSI: '+(activeIndicators.rsi?'ON':'OFF'));updateChartData();}
-function activateDrawingTool(t){state._activeDrawingTool=t;['Cursor','Crosshair','Horiz','Trend'].forEach(x=>{const el=document.getElementById('tool'+x);if(el)el.classList.remove('active');});const el=document.getElementById('tool'+t.charAt(0).toUpperCase()+t.slice(1));if(el)el.classList.add('active');addJournalLog('Tool: '+t.toUpperCase(),'info');if(t==='crosshair')chart.applyOptions({crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});else if(t==='cursor')chart.applyOptions({crosshair:{mode:LightweightCharts.CrosshairMode.Magnet}});}
-function zoomChart(d){if(chart)chart.timeScale().scroll(80*d);}
-
-// ============================================================
-//  EA ENGINE
-// ============================================================
-function toggleBot(){
-  state.botRunning=!state.botRunning;
-  const b=document.getElementById('algoTradingBtn');
-  if(state.botRunning){b.textContent='🟢 Algo Trading';b.classList.add('running');addExpertLog('EA Started.','success');addJournalLog('Auto-Trading Enabled.','success');}
-  else{b.textContent='🔴 Algo Trading';b.classList.remove('running');addExpertLog('EA Stopped.','error');addJournalLog('Auto-Trading Disabled.');}
-}
-function evaluateSignals(name,price){
-  const key=name+'_'+state._currentTF,h=ohlcHistory[key];if(!h||h.length<50)return;
-  const e9=calcEMA(h,9),e21=calcEMA(h,21),rsi=calcRSI(h,14),bb=calcBB(h,20,2);
-  const L=h.length;if(e9.length<2||e21.length<2||rsi.length<2||bb.basis.length<2)return;
-  const l9=e9[e9.length-1].value,p9=e9[e9.length-2].value,l21=e21[e21.length-1].value,p21=e21[e21.length-2].value,lr=rsi[rsi.length-1].value,ub=bb.upper[bb.upper.length-1].value,lb=bb.lower[bb.lower.length-1].value;
-  if(p9<=p21&&l9>l21&&lr>48&&lr<68&&price>=ub*0.998){addExpertLog('Bullish confluence '+name+' @ '+price,'success');triggerAutoOrder(name,'buy',0.10,30,90);}
-  else if(p9>=p21&&l9<l21&&lr<52&&lr>32&&price<=lb*1.002){addExpertLog('Bearish confluence '+name+' @ '+price,'error');triggerAutoOrder(name,'sell',0.10,30,90);}
-}
-function triggerAutoOrder(name,side,lots,sl,tp){
-  if(!state.connected){addExpertLog('Order failed: disconnected.','error');return;}
-  const o=buildOrder(name,side,lots,sl,tp,'cTraderEA');if(!o)return;
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});
-  addExpertLog('PLACED '+side.toUpperCase()+' '+name+' lots '+lots.toFixed(2),'success');
-}
-function saveRiskSettings(){
-  eaRiskSettings.volumeMode=document.getElementById('mmVolumeType').value;
-  eaRiskSettings.riskPct=parseFloat(document.getElementById('mmRiskPct').value)||1.5;
-  eaRiskSettings.fixedVol=parseFloat(document.getElementById('mmFixedVol').value)||0.10;
-  eaRiskSettings.maxPos=parseInt(document.getElementById('mmMaxPos').value)||3;
-  eaRiskSettings.maxSpread=parseFloat(document.getElementById('mmMaxSpread').value)||5;
-  eaRiskSettings.atrMultiplier=parseFloat(document.getElementById('eaAtrMultiplier').value)||2.5;
-  eaRiskSettings.riskToReward=parseFloat(document.getElementById('eaRiskToReward').value)||3;
-  eaRiskSettings.enableTrailing=document.getElementById('trailingToggle').checked;
-  eaRiskSettings.enableBE=document.getElementById('beToggle').checked;
-  eaRiskSettings.trailTrigger=parseFloat(document.getElementById('trailTrigger').value)||40;
-  eaRiskSettings.trailDist=parseFloat(document.getElementById('trailDist').value)||20;
-  eaRiskSettings.beTrigger=parseFloat(document.getElementById('beTrigger').value)||30;
-  eaRiskSettings.beLock=parseFloat(document.getElementById('beLock').value)||2;
-  addJournalLog('EA risk settings saved.','success');addExpertLog('Risk profiles updated.','info');closeModal('riskModal');
-}
-function copyLogs(){
-  try{
-    const j=document.getElementById('journalLogContainer'),e=document.getElementById('expertLogContainer');
-    const jt=j?Array.from(j.querySelectorAll('.log-line')).map(d=>d.textContent).join('\n'):'';
-    const et=e?Array.from(e.querySelectorAll('.log-line')).map(d=>d.textContent).join('\n'):'';
-    const txt='=== JOURNAL ===\n'+jt+'\n\n=== EXPERTS ===\n'+et;
-    navigator.clipboard.writeText(txt).then(()=>addJournalLog('Logs copied to clipboard.','green')).catch(()=>{
-      const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);addJournalLog('Logs copied to clipboard.','green');
-    });
-  }catch(e){addJournalLog('Copy failed: '+e.message,'red');}
-}
-
-// ============================================================
-//  LOGGING
-// ============================================================
-function addExpertLog(m,c){const c2=document.getElementById('expertLogContainer');if(!c2)return;const t=new Date().toTimeString().slice(0,8);const d=document.createElement('div');d.className='log-line';d.innerHTML='<span class="time">['+t+']</span><span class="msg '+(c||'')+'">'+m+'</span>';c2.appendChild(d);c2.scrollTop=c2.scrollHeight;}
-function addJournalLog(m,c){const c2=document.getElementById('journalLogContainer');if(!c2)return;const t=new Date().toTimeString().slice(0,8);const d=document.createElement('div');d.className='log-line';d.innerHTML='<span class="time">['+t+']</span><span class="msg '+(c||'')+'">'+m+'</span>';c2.appendChild(d);c2.scrollTop=c2.scrollHeight;}
-
-// ============================================================
-//  CREDENTIALS & CONNECTION
-// ============================================================
-const CREDENTIALS={clientId:'30945_Xq33WNRLYcZlfuZ2edXYWf1i2WC7fbiAsIqj0SvfZpOf5pWSoW',clientSecret:'Fg2dOfCVrJoNsLeCyl4PVTw8EMiHiJFJ9dEYIimm3hZG9REi6N'};
-function getCredentials(){return{env:document.getElementById('connEnv').value,clientId:CREDENTIALS.clientId,clientSecret:CREDENTIALS.clientSecret,accessToken:document.getElementById('connAccessToken').value.trim(),refreshToken:localStorage.getItem('ctrader_refresh')||'',accountId:document.getElementById('connAccountId').value.trim()};}
-function nextMsgId(){return 'cm_'+(++msgIdCounter)+'_'+Date.now();}
-function sendWs(msg){if(!ws||ws.readyState!==WebSocket.OPEN)return;ws.send(JSON.stringify(msg));}
-function setConnStatus(type,text){const s=document.getElementById('connStatus'),t=document.getElementById('connStatusText');if(s)s.className='conn-status '+type;if(t)t.textContent=text;}
-
-function startOAuth(){const ri=document.getElementById('connRedirectUri').value.trim();if(!ri){addJournalLog('Enter Redirect URI first.','red');return;}const url='https://openapi.ctrader.com/apps/auth?client_id='+encodeURIComponent(CREDENTIALS.clientId)+'&redirect_uri='+encodeURIComponent(ri)+'&scope=trading';window.open(url,'ctrader_oauth','width=600,height=700');addJournalLog('OAuth window opened.','blue');}
-let _oauthCode=null;
-function receiveOAuthCode(code){document.getElementById('oauthRedirectInput').value=code;exchangeAuthCode();}
-function exchangeAuthCode(){
-  let raw=_oauthCode||document.getElementById('oauthRedirectInput').value.trim();if(!raw){addJournalLog('No code found','red');return;}
-  let code=raw;try{const p=new URL(raw);const c=p.searchParams.get('code');if(c)code=c;}catch(e){}
-  const ri=document.getElementById('connRedirectUri').value.trim();
-  addJournalLog('Exchanging code for token...','blue');
-  fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:code,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})})
-  .then(r=>r.json()).then(d=>{
-    if(d.errorCode){addJournalLog('OAuth error: '+(d.description||d.errorCode),'red');return;}
-    if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;localStorage.setItem('ctrader_access',d.accessToken);addJournalLog('✓ Token obtained.','green');if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);_oauthCode=null;document.getElementById('oauthRedirectInput').value='';addJournalLog('Auto-connecting...','blue');setTimeout(toggleConnection,500);}
-    else addJournalLog('Unexpected: '+JSON.stringify(d),'yellow');
-  }).catch(e=>addJournalLog('Token exchange failed: '+e.message,'red')).finally(()=>{_oauthCode=null;});
-}
-function refreshAccessToken(){const r=localStorage.getItem('ctrader_refresh');if(!r){addJournalLog('No refresh token.','red');return Promise.reject();}const ri=document.getElementById('connRedirectUri').value.trim();return fetch('/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:r,client_id:CREDENTIALS.clientId,client_secret:CREDENTIALS.clientSecret,redirect_uri:ri})}).then(r=>r.json()).then(d=>{if(d.accessToken){document.getElementById('connAccessToken').value=d.accessToken;localStorage.setItem('ctrader_access',d.accessToken);if(d.refreshToken)localStorage.setItem('ctrader_refresh',d.refreshToken);addJournalLog('Token refreshed.','green');return d.accessToken;}addJournalLog('Refresh failed.','red');throw new Error(d.description);});}
-
-let _intentionalClose=false;   // true => user wants to be disconnected, never auto-reconnect
-let _reconnectScheduled=false; // guard so only ONE reconnect is ever pending
-let _reconnectDelay=3000;
-function toggleConnection(){
-  const creds=getCredentials(),btn=document.getElementById('connectBtn');
-  if(state.connected||state.connecting){_intentionalClose=true;_reconnectScheduled=false;disconnect();return;}
-  connectSocket();
-}
-function connectSocket(){
-  const creds=getCredentials(),btn=document.getElementById('connectBtn');
-  if(state.connected||state.connecting)return;
-  state.connecting=true;_reconnectScheduled=false;_intentionalClose=false;
-  btn.textContent='Connecting...';setConnStatus('connecting','Connecting...');
-  const host=creds.env==='live'?'live.ctraderapi.com':'demo.ctraderapi.com',url='wss://'+host+':5036';
-  addJournalLog('Connecting to '+host+':5036...','blue');
-  ws=new WebSocket(url);
-  ws.onopen=()=>{addJournalLog('WebSocket connected.','green');setConnStatus('connecting','Authenticating...');authenticateApp();};
-  ws.onmessage=e=>{if(typeof e.data==='string')handleMessage(e.data);else if(e.data instanceof Blob)e.data.text().then(t=>handleMessage(t)).catch(()=>{});};
-  ws.onerror=()=>{addJournalLog('WebSocket error','red');};
-  ws.onclose=ev=>{
-    clearInterval(heartbeatInterval);
-    state.connecting=false;state.connected=false;
-    btn.textContent='Connect';setConnStatus('offline','Disconnected');
-    const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
-    if(_intentionalClose){addJournalLog('Disconnected (manual).','yellow');return;}
-    scheduleReconnect();
-  };
-}
-function scheduleReconnect(){
-  if(_intentionalClose||_reconnectScheduled)return;
-  _reconnectScheduled=true;
-  const delay=_reconnectDelay;
-  _reconnectDelay=Math.min(_reconnectDelay*1.6,20000); // capped exponential backoff
-  addJournalLog('Connection dropped — restoring in '+(delay/1000)+'s...','yellow');
-  setTimeout(()=>{_reconnectScheduled=false;if(!_intentionalClose&&!state.connected&&!state.connecting)connectSocket();},delay);
-}
-function autoReconnect(){
-  const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();
-  if(!tok){addJournalLog('No saved token — please re-authorize.','red');return;}
-  document.getElementById('connAccessToken').value=tok;
-  if(!state.connected&&!state.connecting)connectSocket();
-}
-function disconnect(){
-  _intentionalClose=true;_reconnectScheduled=false;
-  if(heartbeatInterval)clearInterval(heartbeatInterval);
-  if(ws){try{ws.close();}catch(e){} ws=null;}
-  state.connected=false;state.connecting=false;
-  document.getElementById('connectBtn').textContent='Connect';setConnStatus('offline','Disconnected');
-  const ci=document.getElementById('statusConn');ci.className='conn-indicator';document.getElementById('statusConnText').textContent='Disconnected';
-  addJournalLog('Disconnected.','yellow');
-}
-function authenticateApp(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.APPLICATION_AUTH_REQ,payload:{clientId:c.clientId,clientSecret:c.clientSecret}});addJournalLog('App auth sent.','blue');}
-function authenticateAccount(){const c=getCredentials(),id=parseInt(c.accountId,10);if(!id||isNaN(id)){addJournalLog('Invalid account ID.','red');return;}sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ACCOUNT_AUTH_REQ,payload:{ctidTraderAccountId:id,accessToken:c.accessToken}});addJournalLog('Account auth #'+id,'blue');}
-function getAccountsByToken(){const c=getCredentials();sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ,payload:{accessToken:c.accessToken}});}
-
-// ============================================================
-//  MESSAGE HANDLER
-// ============================================================
-function handleMessage(data){
-  try{
-    const msg=JSON.parse(data),type=msg.payloadType,payload=msg.payload||{};
-    switch(type){
-      case PAYLOAD.APPLICATION_AUTH_RES:
-        addJournalLog('App authenticated.','green');setConnStatus('connecting','Getting accounts...');
-        if(getCredentials().accessToken)getAccountsByToken();else addJournalLog('No token.','yellow');
-        break;
-      case PAYLOAD.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES:{
-        const accs=payload.ctidTraderAccount||[],sel=document.getElementById('connAccountId');sel.innerHTML='';
-        if(!accs.length){sel.innerHTML='<option value="">No accounts</option>';addJournalLog('No accounts.','red');break;}
-        addJournalLog(accs.length+' account(s) found.','green');
-        accs.forEach((a,i)=>{const lbl=a.accountType||a.accountTypeName||'unknown',live=a.isLive===undefined?(lbl.toLowerCase().includes('live')):a.isLive,env=live?'live':'demo',o=document.createElement('option');o.value=a.ctidTraderAccountId;o.textContent='#'+a.ctidTraderAccountId+' — '+lbl+' ('+env+')';sel.appendChild(o);});
-        window._allAccounts=accs;
-        // Prefer the saved account, else first; set env from it WITHOUT disconnecting
-        const saved=localStorage.getItem('ctrader_account');
-        const pick=accs.find(a=>a.ctidTraderAccountId==saved)||accs[0];
-        sel.value=pick.ctidTraderAccountId;
-        const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive,env=live?'live':'demo';
-        document.getElementById('connEnv').value=env;
-        const ci=document.getElementById('connAccessToken'),ta=document.getElementById('connAccountId');
-        if(ta)ta.value=pick.ctidTraderAccountId;
-        authenticateAccount();break;}
-      case PAYLOAD.ACCOUNT_AUTH_RES:
-        state.connected=true;state.connecting=false;_intentionalClose=false;_reconnectDelay=3000;
-        document.getElementById('connectBtn').textContent='Disconnect';
-        document.getElementById('statusConn').className='conn-indicator connected';document.getElementById('statusConnText').textContent='Connected';
-        document.getElementById('navigatorAccountId').textContent='#'+getCredentials().accountId;
-        addJournalLog('Account linked to cTrader.','green');setConnStatus('online','Connected & authorized');
-        startHeartbeat();subscribeSpots();getTraderInfo();getOrderList();
-        addJournalLog('Ready to trade.','green');break;
-      case PAYLOAD.SUBSCRIBE_SPOTS_RES: addJournalLog('Price streams active.','success');break;
-      case PAYLOAD.SYMBOLS_LIST_RES:
-      case 2115: handleSymbolList(payload);break;
-      case PAYLOAD.SPOT_EVENT: handleSpotEvent(payload);break;
-      case PAYLOAD.GET_TICK_DATA_RES:
-      case 2575: handleTickData(payload);break;
-      case PAYLOAD.GET_TRENDBARS_RES:
-      case 2133: handleTrendbars(payload);break;
-      case PAYLOAD.TRADER_RES:
-      case PAYLOAD.TRADER_UPDATE_EVENT: handleTraderInfo(payload);if(type===PAYLOAD.TRADER_UPDATE_EVENT)addJournalLog('Account updated.','blue');break;
-      case PAYLOAD.MARGIN_CHANGED_EVENT: if(payload.usedMargin!==undefined){const md=payload.moneyDigits||0;state.margin=payload.usedMargin/Math.pow(10,md);}updateAccountDisplay();break;
-      case PAYLOAD.ORDER_LIST_RES: handleOrderList(payload);break;
-      case PAYLOAD.EXECUTION_EVENT: handleExecutionEvent(payload);break;
-      case PAYLOAD.ORDER_ERROR_EVENT: addJournalLog('Order error: '+(payload.errorCode||'')+' — '+(payload.description||''),'red');break;
-      case PAYLOAD.ERROR_RES: addJournalLog('API Error ['+payload.errorCode+']: '+(payload.description||''),'red');if(payload.errorCode==='TOKEN_EXPIRED'||payload.errorCode==='INVALID_ACCESS_TOKEN'){addJournalLog('Refreshing...','yellow');refreshAccessToken().then(()=>{_intentionalClose=false;connectSocket();}).catch(()=>addJournalLog('Refresh failed.','red'));}break;
-      case PAYLOAD.CLIENT_DISCONNECT_EVENT: addJournalLog('Server closed session — restoring...','yellow');if(ws){try{ws.close();}catch(e){}}ws=null;state.connected=false;state.connecting=false;clearInterval(heartbeatInterval);scheduleReconnect();break;
-      case 51: break;
-      default: break;
-    }
-  }catch(e){addJournalLog('Parse error: '+e.message,'red');}
-}
-function startHeartbeat(){if(heartbeatInterval)clearInterval(heartbeatInterval);heartbeatInterval=setInterval(()=>{if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({payloadType:51,payload:{}}));},10000);}
-
-// ============================================================
-//  MARKET DATA
-// ============================================================
-function subscribeSpots(){
-  const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  // 2114 = SYMBOLS_LIST_REQ — fetch the tradable symbol list, then subscribe in the handler
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SYMBOLS_LIST_REQ,payload:{ctidTraderAccountId:id}});
-}
-function handleSymbolList(payload){
-  const syms=payload.symbol||payload.symbols||[];
-  // One-time full dump so we can see exactly what symbols this account offers
-  if(!window._symDump){window._symDump=1;addJournalLog('ALL SYMBOLS ('+syms.length+'): '+syms.map(s=>s.symbolName).join(' | '),'info');}
-  const cryptoNames=/\b(BTC|ETH|LTC|XRP|SOL|DOGE|ADA|TRX|DOT|BCH|LINK|UNI|AVAX|MATIC|SHIB|XLM|ETC|NEAR|ATOM|ALGO|FTM|AXS|MKR|TON|USDT|USDC|DAI)(USD|EUR|USDC|JPY|ETH|LTC)?\b/i;
-  // Crypto symbols only (never fall back to non-crypto)
-  const crypto=syms.filter(s=>{
-    const nm=s.symbolName||'';
-    if(!cryptoNames.test(nm)) return false;
-    const lotSize=s.lotSize||100000, minVol=s.minVolume||0;
-    const minLot=lotSize?minVol/lotSize:0;
-    return minLot<=1.0;
-  });
-  if(!crypto.length){addJournalLog('No crypto symbols on this account (found '+syms.length+' total, none crypto). Try another account.','yellow');}
-  const list=crypto;
-  list.forEach(s=>{state.symbolIdMap[s.symbolId]=s.symbolName;state.symbolNameMap[s.symbolName]=s.symbolId;state._symDetails[s.symbolName]={digits:s.digits||5,pip:s.pipPosition||2,lotSize:s.lotSize||100000,minVolume:s.minVolume||0,maxVolume:s.maxVolume||0,minLot:(s.lotSize?(s.minVolume||0)/s.lotSize:0.01)};});
-  const c=getCredentials(),id=parseInt(c.accountId,10)||0;
-  // Build market watch rows (crypto only)
-  const body=document.getElementById('marketWatchBody');if(body){body.innerHTML='';if(!list.length){body.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--mt5-text-muted);padding:15px">No crypto symbols on this account</td></tr>';}else list.slice(0,14).forEach(s=>{const tr=document.createElement('tr');tr.id='mw_'+s.symbolName;tr.onclick=()=>selectSymbol(s.symbolName);tr.innerHTML='<td>'+s.symbolName+'</td><td id="bid_'+s.symbolName+'">—</td><td id="ask_'+s.symbolName+'">—</td><td id="spr_'+s.symbolName+'">—</td>';body.appendChild(tr);});document.getElementById('mwCount').textContent=list.length+' crypto symbols';}
-  const dd=document.getElementById('orderSymbol');if(dd){dd.innerHTML='';list.slice(0,40).forEach(s=>{const o=document.createElement('option');o.value=s.symbolName;o.textContent=s.symbolName;dd.appendChild(o);});}
-  // Actually subscribe to price spots (2127) for the matched crypto symbols (cap 14)
-  const ids=list.slice(0,14).map(s=>s.symbolId).filter(Boolean);
-  if(ids.length){sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.SUBSCRIBE_SPOTS_REQ,payload:{ctidTraderAccountId:id,symbolId:ids}});state.subscribedSymbols=ids.map(i=>state.symbolIdMap[i]||i);addJournalLog('Subscribed to '+ids.length+' crypto symbols.','green');if(!state._currentSymbol&&list[0])selectSymbol(list[0].symbolName);}
-  else {addJournalLog('Nothing to subscribe — switch to a crypto-enabled account.','yellow');}
-}
-function handleSpotEvent(payload){
-  const name=state.symbolIdMap[payload.symbolId];if(!name)return;
-  const dig=(state._symDetails[name]&&state._symDetails[name].digits)||5, div=Math.pow(10,dig);
-  const bid=payload.bid?payload.bid/div:null,ask=payload.ask?payload.ask/div:null;
-  const be=document.getElementById('bid_'+name),ae=document.getElementById('ask_'+name),se=document.getElementById('spr_'+name);
-  if(be&&ae){if(bid)be.textContent=bid.toFixed(dig);if(ask)ae.textContent=ask.toFixed(dig);if(ask&&bid)se.textContent=((ask-bid)/div*Math.pow(10,dig)).toFixed(1);}
-  if(name===state._currentSymbol){
-    document.getElementById('oneClickBid').textContent=bid?bid.toFixed(dig):'—';
-    document.getElementById('oneClickAsk').textContent=ask?ask.toFixed(dig):'—';
-    document.getElementById('oneClickSpread').textContent='Spread: '+(ask&&bid?((ask-bid)/div*Math.pow(10,dig)).toFixed(1):'—');
-    updateChartFromPrice(bid);
-    if(state.botRunning)evaluateSignals(name,bid);
-  }
-}
-
-// ============================================================
-//  TRADER INFO & ORDERS
-// ============================================================
-function getTraderInfo(){const id=parseInt(getCredentials().accountId,10)||0;if(id)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.TRADER_REQ,payload:{ctidTraderAccountId:id}});}
-function handleTraderInfo(payload){const t=payload.trader;if(!t){addJournalLog('No trader data.','yellow');return;}const md=t.moneyDigits||0,d=Math.pow(10,md),raw=t.balance??0,b=typeof raw==='object'?(raw.amount||0):Number(raw);state.balance=b/d;state.equity=state.balance;addJournalLog('Balance: $'+state.balance.toFixed(2),'green');updateAccountDisplay();}
-function getOrderList(){const id=parseInt(getCredentials().accountId,10)||0;if(id)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.ORDER_LIST_REQ,payload:{ctidTraderAccountId:id}});}
-function handleOrderList(payload){const os=payload.order||[];state.positions=[];state.pendingOrders=[];os.forEach(o=>{const sym=state.symbolIdMap[o.symbolId]||('#'+o.symbolId),ls=(state._symDetails[sym]&&state._symDetails[sym].lotSize)||100000;if(o.orderStatus==='ORDER_STATUS_FILLED')state.positions.push({id:o.positionId||o.orderId,symbol:sym,side:o.tradeDirection==='BUY'?'buy':'sell',volume:o.volume?o.volume/ls:0.1,entry:o.price,sl:o.stopLoss?.price,tp:o.takeProfit?.price,current:o.price});else if(o.orderStatus==='ORDER_STATUS_PENDING')state.pendingOrders.push(o);});updateToolboxGrids();}
-const EXEC_TYPE={1:'ACCEPTED',2:'FILLED',3:'REJECTED',4:'CANCELLED',5:'EXPIRED',6:'PARTIALLY_FILLED'};
-function handleExecutionEvent(payload){
-  const et=EXEC_TYPE[payload.executionType]||('TYPE_'+payload.executionType);
-  const id=payload.orderId||(payload.order&&payload.order.orderId)||payload.positionId||payload.dealId||'';
-  addJournalLog('Execution '+et+' — #'+id,'blue');
-  if(payload.executionType===2||payload.executionType===4||payload.executionType===3)setTimeout(getOrderList,500);
-}
-
-// ============================================================
-//  TRADING
-// ============================================================
-function onSymbolChange(v){selectSymbol(v);}
-function selectSymbol(name){
-  state._currentSymbol=name;
-  state._liveBar=null;
-  document.getElementById('oneClickSymbol').textContent=name;
-  document.getElementById('statusCurrentSymbol').textContent=name;
-  ohlcHistory[name+'_'+state._currentTF]=[]; updateChartData();
-  loadHistory(name); // import real OHLC history from cTrader for this symbol
-  if(window.matchMedia('(max-width:767px)').matches)closeMobileSidebar();
-}
-
-// Request real historical OHLC via trendbars (the supported historical endpoint)
-function loadHistory(name){
-  const sid=state.symbolNameMap[name]; if(!sid||!state.connected) return;
-  const nowMin=Math.floor(Date.now()/60000);
-  const from=nowMin-60*24*7; // last 7 days, in minutes
-  addJournalLog('Importing '+name+' ('+state._currentTF+') history...','blue');
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.GET_TRENDBARS_REQ,payload:{
-    ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
-    symbolId:sid, period:tfToPeriod(state._currentTF), fromTimestamp:from, count:500
-  }});
-  // Safety net: if cTrader does not deliver history (common on demo), seed from live market data
-  const key=name+'_'+state._currentTF;
-  clearTimeout(state._histTimer);
-  state._histTimer=setTimeout(()=>{
-    if(state._currentSymbol===name && (!ohlcHistory[key]||!ohlcHistory[key].length)) seedExternalHistory(name, state._currentTF);
-  }, 2500);
-}
-// Map a cTrader symbol (e.g. BTCUSD) to a Binance pair (BTCUSDT) for historical seeding
-function toBinanceSymbol(sym){
-  const m=String(sym||'').match(/^([A-Za-z]{2,6})(USD|USDC|EUR|JPY|GBP|USDT)$/);
-  if(!m) return null;
-  let base=m[1].toUpperCase(), quote=m[2].toUpperCase();
-  if(quote==='USD') quote='USDT';
-  if(quote==='USDC') quote='USDC';
-  return base+quote;
-}
-function seedExternalHistory(name, tf){
-  const bn=toBinanceSymbol(name);
-  if(!bn) return;
-  const iv={M1:'1m',M5:'5m',M15:'15m',H1:'1h',D1:'1d'}[tf]||'15m';
-  fetch('https://api.binance.com/api/v3/klines?symbol='+bn+'&interval='+iv+'&limit=500')
-    .then(r=>r.json())
-    .then(k=>{
-      if(!Array.isArray(k)||!k.length) return;
-      const key=name+'_'+tf;
-      ohlcHistory[key]=k.map(x=>({time:Math.floor(x[0]/1000),open:parseFloat(x[1]),high:parseFloat(x[2]),low:parseFloat(x[3]),close:parseFloat(x[4])}));
-      state._liveBar=null;
-      addJournalLog('Loaded '+ohlcHistory[key].length+' historical bars ('+bn+')','green');
-      updateChartData();
-    })
-    .catch(e=>addJournalLog('Market-data history unavailable: '+e.message,'yellow'));
-}
-function buildOrder(sn,side,vol,sl,tp,cm){
-  const sid=state.symbolNameMap[sn];
-  if(!sid){addJournalLog('Symbol not mapped: '+sn,'red');return null;}
-  if(!vol||vol<=0){addJournalLog('Invalid volume.','red');return null;}
-  const d=state._symDetails[sn]||{};
-  const lotSize=d.lotSize||100000;
-  let volume=Math.round(vol*lotSize); // volume is in base units
-  if(volume<1) volume=1;              // cTrader volume must be >=1 unit
-  // Clamp to the symbol's allowed range
-  if(d.maxVolume&&volume>d.maxVolume) volume=d.maxVolume;
-  if(d.minVolume&&volume<d.minVolume) volume=d.minVolume;
-  if(lotSize>1 && volume % lotSize !== 0) volume=Math.max(d.minVolume||lotSize, Math.round(volume/lotSize)*lotSize);
-  const o={
-    ctidTraderAccountId:parseInt(getCredentials().accountId)||0,
-    symbolId:sid,
-    tradeSide:side==='buy'?'BUY':'SELL',
-    orderType:'MARKET',
-    volume:volume,
-    accessToken:getCredentials().accessToken,
-    label:'cTrader', comment:cm||'cTrader'
-  };
-  if(sl>0)o.stopLossPips=sl;
-  if(tp>0)o.takeProfitPips=tp;
-  return o;
-}
-function placeOrder(side){
-  if(!state.connected){addJournalLog('Cannot trade: not connected.','red');return;}
-  const sn=document.getElementById('orderSymbol').value,vol=parseFloat(document.getElementById('orderVolume').value)||0.01,sl=parseFloat(document.getElementById('orderSL').value)||0,tp=parseFloat(document.getElementById('orderTP').value)||0,cm=document.getElementById('orderComment').value||'cTrader';
-  const o=buildOrder(sn,side,vol,sl,tp,cm); if(!o)return;
-  sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});
-  addJournalLog('Placing '+(side.toUpperCase())+' '+vol+' '+sn,side==='buy'?'green':'red');closeModal('orderModal');
-}
-function placeQuickOrder(side){const vol=parseFloat(document.getElementById('oneClickVolume').value)||0.1;const o=buildOrder(state._currentSymbol,side,vol,30,90,'cTrader');if(o)sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.NEW_ORDER_REQ,payload:o});}
-function closePositionApi(id){if(!state.connected)return;sendWs({clientMsgId:nextMsgId(),payloadType:PAYLOAD.CLOSE_POSITION_REQ,payload:{ctidTraderAccountId:parseInt(getCredentials().accountId)||0,positionId:id,accessToken:getCredentials().accessToken}});addJournalLog('Closing #'+id,'yellow');}
-function syncVolumeInputs(v){document.getElementById('oneClickVolume').value=v;document.getElementById('orderVolume').value=v;}
-
-// ============================================================
-//  UI UTILITIES
-// ============================================================
-function toggleMenu(el){const a=el.classList.contains('active');document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('active'));if(!a)el.classList.add('active');}
-window.addEventListener('click',e=>{if(!e.target.closest('.menu-item'))document.querySelectorAll('.menu-item').forEach(m=>m.classList.remove('active'));});
-function openModal(id){const e=document.getElementById(id);if(e)e.classList.add('open');}
-function closeModal(id){const e=document.getElementById(id);if(e)e.classList.remove('open');}
-function toggleSidebarSection(s){const e=document.getElementById(s==='marketWatch'?'marketWatchSection':'navigatorSection');if(e)e.style.display=e.style.display==='none'?'flex':'none';}
-function toggleFolder(id){const e=document.getElementById(id);if(e)e.style.display=e.style.display==='none'?'flex':'none';}
-function switchToolboxTab(tab){document.querySelectorAll('.toolbox-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.toolbox-pane').forEach(p=>p.classList.remove('active'));const a=document.getElementById('tab'+tab.charAt(0).toUpperCase()+tab.slice(1)),b=document.getElementById('pane'+tab.charAt(0).toUpperCase()+tab.slice(1));if(a)a.classList.add('active');if(b)b.classList.add('active');}
-function updateAccountDisplay(){
-  const b=state.balance||0,e=state.equity||0,m=state.margin||0,f=e-m;
-  const sb=document.getElementById('statusBalance'); if(sb) sb.textContent='Balance: $'+b.toFixed(2);
-  updateToolboxGrids();
-}
-function updateToolboxGrids(){
-  const tb=document.getElementById('toolboxTradeBody');if(!tb)return;
-  if(!state.positions.length){tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--mt5-text-muted);padding:15px;">No open positions</td></tr>';}
-  else tb.innerHTML=state.positions.map(p=>'<tr><td>'+p.id+'</td><td>'+new Date().toLocaleTimeString()+'</td><td>'+p.symbol+'</td><td><span style="color:'+(p.side==='buy'?'var(--mt5-green)':'var(--mt5-red)')+'">'+(p.side.toUpperCase())+'</span></td><td>'+p.volume.toFixed(2)+'</td><td>'+(p.entry?p.entry.toFixed(5):'—')+'</td><td>'+(p.sl?p.sl.toFixed(5):'—')+'</td><td>'+(p.tp?p.tp.toFixed(5):'—')+'</td><td>0.00</td><td>0.00</td><td style="text-align:right">0.00</td><td><button class="toolbar-btn" style="color:var(--mt5-red)" onclick="closePositionApi('+p.id+')">✕ Close</button></td></tr>').join('');
-  const sum=document.createElement('tr');sum.className='summary-row';
-  sum.innerHTML='<td colspan="12">Balance: $'+(state.balance||0).toFixed(2)+' | Equity: $'+(state.equity||0).toFixed(2)+' | Margin: $'+(state.margin||0).toFixed(2)+' | Free: $'+((state.equity||0)-(state.margin||0)).toFixed(2)+'</td>';
-  tb.appendChild(sum);
-}
-
-// Mobile nav
-function openMobileSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
-function closeMobileSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
-function showMobileView(view,el){document.querySelectorAll('.mt5-mobile-tabbar .mtab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');if(view==='trade'){switchToolboxTab('trade');const p=document.getElementById('paneTrade');if(p)p.scrollIntoView({behavior:'smooth',block:'start'});}else if(view==='experts'){switchToolboxTab('experts');const p=document.getElementById('paneExperts');if(p)p.scrollIntoView({behavior:'smooth',block:'start'});}else if(view==='chart'){const c=document.querySelector('.mt5-chart-area');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});}}
-
-// ============================================================
-//  INIT
-// ============================================================
-initLightweightChart();
-(function(){const ri=document.getElementById('connRedirectUri'),rd=document.getElementById('redirectDisplay');if(ri&&rd)ri.addEventListener('input',function(){rd.textContent=this.value||'https://ctraderbot.vercel.app';localStorage.setItem('ctrader_redirect',this.value);});})();
-(function(){const saved=localStorage.getItem('ctrader_redirect');if(saved){const ri=document.getElementById('connRedirectUri');if(ri&&!ri.value)ri.value=saved;}})();
-(function(){const tok=localStorage.getItem('ctrader_access');if(tok){const ta=document.getElementById('connAccessToken');if(ta&&!ta.value)ta.value=tok;}})();
-(function(){const acc=localStorage.getItem('ctrader_account');if(acc){const sel=document.getElementById('connAccountId');if(sel&&!sel.value){const o=document.createElement('option');o.value=acc;o.textContent='#'+acc;sel.appendChild(o);sel.value=acc;}}})();
-(function(){const sel=document.getElementById('connAccountId');if(sel)sel.addEventListener('change',function(){localStorage.setItem('ctrader_account',this.value);const accs=window._allAccounts||[],pick=accs.find(a=>a.ctidTraderAccountId==this.value);if(pick){const live=pick.isLive===undefined?(pick.accountType||'').toLowerCase().includes('live'):pick.isLive;document.getElementById('connEnv').value=live?'live':'demo';if(state.connected||state.connecting){addJournalLog('Switching account...','blue');disconnect();setTimeout(connectSocket,500);}}});})();
-(function(){const p=new URLSearchParams(window.location.search),code=p.get('code');if(code){if(window.opener&&window.opener.receiveOAuthCode){window.opener.receiveOAuthCode(code);window.close();}else{document.getElementById('oauthRedirectInput').value=code;addJournalLog('OAuth code detected!','blue');setTimeout(exchangeAuthCode,500);if(window.history.replaceState)window.history.replaceState({}, {title:document.title}, window.location.pathname);}}})();
-// Auto-connect using saved token (valid up to 30 days) — no re-OAuth needed
-(function(){const tok=localStorage.getItem('ctrader_access')||document.getElementById('connAccessToken').value.trim();const acc=localStorage.getItem('ctrader_account')||document.getElementById('connAccountId').value.trim();if(tok&&acc){addJournalLog('Saved token found — auto-connecting...','green');setTimeout(autoReconnect,800);}else{addJournalLog('cTrader Terminal v3.0 loaded. Authorize to begin.','success');}})();
-</script>
+<script src="/js/proto.js"></script>
+<script src="/js/conn.js"></script>
+<script src="/js/app.js"></script>
 </body>
 </html>

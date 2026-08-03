@@ -1,1 +1,4 @@
 .vercel
+.env
+server_output.log
+node_modules
