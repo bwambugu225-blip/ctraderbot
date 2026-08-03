@@ -140,6 +140,7 @@
     },
     onAccounts: (accounts) => {
       window._accounts = accounts;
+      log('onAccounts: conn.connected=' + Conn.connected + ' phase=' + Conn.phase + ' n=' + accounts.length, 'info');
       const sel = $('accSelect');
       if (!accounts.length) {
         if (sel) sel.innerHTML = '<option value="">No accounts</option>';
@@ -148,36 +149,37 @@
         Conn.disconnect();
         return;
       }
-       // Populate account dropdown if it exists
-       if (sel) {
-         sel.innerHTML = '';
-         accounts.forEach((a) => {
-           const opt = document.createElement('option');
-           opt.value = a.ctidTraderAccountId;
-           opt.textContent = '#' + a.ctidTraderAccountId + ' — ' + (a.accountType || 'account');
-           sel.appendChild(opt);
-         });
-         const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
-         if (pick) {
-           sel.value = pick.ctidTraderAccountId;
-           S.accountId = String(pick.ctidTraderAccountId);
-           S.env = pick.isLive ? 'live' : 'demo';
-           savePrefs();
-         }
-       } else {
-         // No dropdown — still pick the first account so auth can proceed
-         const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
-         if (pick) {
-           S.accountId = String(pick.ctidTraderAccountId);
-           S.env = pick.isLive ? 'live' : 'demo';
-           savePrefs();
-         }
-       }
-       // Finish auth with the picked account so the session goes live
-       if (!Conn.connected && (Conn.phase === 'app_authed' || Conn.phase === 'accounts_loaded')) {
-         log('Finishing account auth with #' + S.accountId + '…', 'info');
-         Conn.accountAuth(S.accountId, Conn.creds.accessToken);
-       }
+      // Populate account dropdown if it exists
+      if (sel) {
+        sel.innerHTML = '';
+        accounts.forEach((a) => {
+          const opt = document.createElement('option');
+          opt.value = a.ctidTraderAccountId;
+          opt.textContent = '#' + a.ctidTraderAccountId + ' — ' + (a.accountType || 'account');
+          sel.appendChild(opt);
+        });
+        const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
+        if (pick) {
+          sel.value = pick.ctidTraderAccountId;
+          S.accountId = String(pick.ctidTraderAccountId);
+          S.env = pick.isLive ? 'live' : 'demo';
+          savePrefs();
+        }
+      } else {
+        // No dropdown — still pick the first account so auth can proceed
+        const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
+        if (pick) {
+          S.accountId = String(pick.ctidTraderAccountId);
+          S.env = pick.isLive ? 'live' : 'demo';
+          savePrefs();
+        }
+      }
+      // Finish auth with the picked account so the session goes live
+      log('onAccounts auth-gate: connected=' + Conn.connected + ' phase=' + Conn.phase + ' accountId=' + S.accountId, 'info');
+      if (!Conn.connected && (Conn.phase === 'app_authed' || Conn.phase === 'accounts_loaded')) {
+        log('Finishing account auth with #' + S.accountId + '…', 'info');
+        Conn.accountAuth(S.accountId, Conn.creds.accessToken);
+      }
     },
     onTokenError: () => {
       log('Token expired — refreshing automatically.', 'warn');
