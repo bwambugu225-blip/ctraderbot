@@ -182,6 +182,7 @@ window.Conn = (function () {
         case P.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: {
           const accounts = payload.ctidTraderAccount || [];
           this.log(accounts.length + ' account(s) found for token.', 'ok');
+          this.phase = 'accounts_loaded';
           if (this.onAccounts) this.onAccounts(accounts);
           break;
         }
