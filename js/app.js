@@ -1364,6 +1364,15 @@
 
   // boot
   function boot() {
+    // Surface any JS crash into the Journal so connection failures are never silent.
+    window.addEventListener('error', (e) => {
+      const fn = (e && e.filename) ? e.filename.replace(/^.*\//, '') + (e && e.lineno ? ':' + e.lineno : '') : '';
+      log('JS error' + (fn ? ' @' + fn : '') + ': ' + (e && e.message ? e.message : (e && e.error ? (e.error.message || 'unknown') : 'unknown')), 'err');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const r = e && e.reason;
+      log('JS rejection: ' + (r && r.message ? r.message : (r ? String(r) : 'unknown')), 'err');
+    });
     const isLocal = /localhost|127\.0\.0\.1|file:/.test(window.location.origin);
     if (isLocal) {
       log('Running on localhost — /api/* endpoints do not exist here, so OAuth and app auth will fail. Deploy to Vercel.', 'warn');

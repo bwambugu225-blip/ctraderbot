@@ -12,5 +12,10 @@
     { "src": "/css/(.*)", "dest": "/css/$1" },
     { "src": "/js/(.*)", "dest": "/js/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/js/(.*)", "headers": [ { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" } ] },
+    { "source": "/css/(.*)", "headers": [ { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" } ] },
+    { "source": "/index.html", "headers": [ { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" } ] }
   ]
 }
