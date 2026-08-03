@@ -149,7 +149,13 @@
         Conn.disconnect();
         return;
       }
-      // Populate account dropdown if it exists
+      const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
+      const socketIsLive = Conn.creds.env === 'live';
+      if (pick) {
+        S.accountId = String(pick.ctidTraderAccountId);
+        S.env = pick.isLive ? 'live' : 'demo';
+        savePrefs();
+      }
       if (sel) {
         sel.innerHTML = '';
         accounts.forEach((a) => {
@@ -158,25 +164,18 @@
           opt.textContent = '#' + a.ctidTraderAccountId + ' — ' + (a.accountType || 'account');
           sel.appendChild(opt);
         });
-        const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
-        if (pick) {
-          sel.value = pick.ctidTraderAccountId;
-          S.accountId = String(pick.ctidTraderAccountId);
-          S.env = pick.isLive ? 'live' : 'demo';
-          savePrefs();
-        }
-      } else {
-        // No dropdown — still pick the first account so auth can proceed
-        const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
-        if (pick) {
-          S.accountId = String(pick.ctidTraderAccountId);
-          S.env = pick.isLive ? 'live' : 'demo';
-          savePrefs();
-        }
+        if (pick) sel.value = pick.ctidTraderAccountId;
       }
+      const envSel = $('connEnv');
+      if (envSel) envSel.value = S.env;
       // Finish auth with the picked account so the session goes live
       log('onAccounts auth-gate: connected=' + Conn.connected + ' phase=' + Conn.phase + ' accountId=' + S.accountId, 'info');
       if (!Conn.connected && (Conn.phase === 'app_authed' || Conn.phase === 'accounts_loaded')) {
+        if (pick && (!!pick.isLive) !== socketIsLive) {
+          log('Account is ' + (pick.isLive ? 'LIVE' : 'demo') + ' but socket is ' + (socketIsLive ? 'live' : 'demo') + ' — reconnecting to the right host…', 'info');
+          setTimeout(function () { Conn.connectFresh(); }, 400);
+          return;
+        }
         log('Finishing account auth with #' + S.accountId + '…', 'info');
         Conn.accountAuth(S.accountId, Conn.creds.accessToken);
       }
@@ -1373,17 +1372,24 @@
     Conn.connectFresh();
   }
 
-  function changeAccount() {
-    const sel = $('accSelect');
-    if (!sel) return;
-    S.accountId = sel.value;
-    localStorage.setItem('ctrader_account', S.accountId);
-    if (Conn.connected) {
-      Conn.reconnectNow();
-    } else {
-      Conn.connect();
-    }
-  }
+   function changeAccount() {
+     const sel = $('accSelect');
+     if (!sel) return;
+     S.accountId = sel.value;
+     localStorage.setItem('ctrader_account', S.accountId);
+     const acc = window._accounts ? window._accounts.find((a) => String(a.ctidTraderAccountId) === String(sel.value)) : null;
+     if (acc) {
+       S.env = acc.isLive ? 'live' : 'demo';
+       savePrefs();
+       const envSel = $('connEnv');
+       if (envSel) envSel.value = S.env;
+     }
+     if (Conn.connected || Conn.isConnecting) {
+       Conn.connectFresh();
+     } else {
+       Conn.connect();
+     }
+   }
 
   // ============================================================
   // INIT
