@@ -46,7 +46,10 @@ window.Conn = (function () {
     get isConnecting() { return this.state === 'connecting'; },
 
     connect() {
-      if (this.state === 'connecting' || this.state === 'connected') return;
+      if (this.state === 'connecting' || this.state === 'connected') {
+        this.log('Connect called but already ' + this.state + ' — use connectFresh() to restart.', 'warn');
+        return;
+      }
       const creds = this.creds;
       if (!creds.clientId || !creds.clientSecret) {
         this.log('Missing client credentials. Add them to api/config.js.', 'err');
@@ -135,6 +138,19 @@ window.Conn = (function () {
       if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
       if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
       this.state = 'idle';
+      this.connect();
+    },
+
+    // Public: always tear down and start fresh — used after OAuth/manual connect
+    // so a stale "connecting" socket can never block a new token.
+    connectFresh() {
+      this.intentional = false;
+      this.giveUp = false;
+      this.reconnectScheduled = false;
+      if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+      if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
+      this.state = 'idle';
+      this.log('Restarting connection with current credentials…', 'info');
       this.connect();
     },
 

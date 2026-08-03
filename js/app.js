@@ -1220,7 +1220,7 @@
         $('tokInput').value = d.accessToken;
         log('Access token obtained. Connecting…', 'ok');
         toast('Authorized', 'ok');
-        Conn.connect();
+        Conn.connectFresh();
       } else {
         log('OAuth failed: ' + oauthError(d), 'err');
         toast('OAuth failed — see Journal', 'err');
@@ -1251,7 +1251,7 @@
     S.accessToken = tok;
     savePrefs();
     log('Connecting with provided token…', 'info');
-    Conn.connect();
+    Conn.connectFresh();
   }
 
   function changeAccount() {
@@ -1336,7 +1336,7 @@
 
     // buttons
     $('oauthBtn').addEventListener('click', startOAuth);
-    $('connectBtn').addEventListener('click', () => { closeModal('connModal'); Conn.connect(); });
+    $('connectBtn').addEventListener('click', () => { closeModal('connModal'); Conn.connectFresh(); });
     $('disconnectBtn').addEventListener('click', () => { Conn.disconnect(); });
     $('cbGoBtn').addEventListener('click', exchangeAuthCodeManual);
     $('eaSaveBtn').addEventListener('click', saveEA);
