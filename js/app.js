@@ -8,7 +8,8 @@
 
   // ---------------- state ----------------
   const S = {
-    clientId: '', clientSecret: '',
+    clientId: localStorage.getItem('ctrader_client_id') || '',
+    clientSecret: localStorage.getItem('ctrader_client_secret') || '',
     env: localStorage.getItem('ctrader_env') || 'demo',
     accountId: localStorage.getItem('ctrader_account') || '',
     redirectUri: localStorage.getItem('ctrader_redirect') || 'https://ctraderbot.vercel.app',
@@ -113,13 +114,17 @@
   }
 
   Conn.init({
-    getCredentials: () => ({
-      env: S.env,
-      clientId: S.clientId,
-      clientSecret: S.clientSecret,
-      accessToken: $('tokInput') ? $('tokInput').value.trim() || S.accessToken : S.accessToken,
-      accountId: S.accountId,
-    }),
+    getCredentials: () => {
+      const cid = $('clientIdInput') ? $('clientIdInput').value.trim() : '';
+      const csec = $('clientSecretInput') ? $('clientSecretInput').value.trim() : '';
+      return {
+        env: S.env,
+        clientId: cid || S.clientId,
+        clientSecret: csec || S.clientSecret,
+        accessToken: $('tokInput') ? $('tokInput').value.trim() || S.accessToken : S.accessToken,
+        accountId: S.accountId,
+      };
+    },
     onStatus: (text, cls) => statusPill(text, cls),
     onLog: log,
     onConnected: () => {
@@ -1278,6 +1283,16 @@
     localStorage.setItem('ctrader_account', S.accountId);
     localStorage.setItem('ctrader_access', S.accessToken);
     localStorage.setItem('ctrader_refresh', S.refreshToken);
+    const cid = $('clientIdInput') ? $('clientIdInput').value.trim() : '';
+    const csec = $('clientSecretInput') ? $('clientSecretInput').value.trim() : '';
+    if (cid) {
+      S.clientId = cid;
+      localStorage.setItem('ctrader_client_id', cid);
+    }
+    if (csec) {
+      S.clientSecret = csec;
+      localStorage.setItem('ctrader_client_secret', csec);
+    }
   }
 
   function startOAuth() {
@@ -1287,7 +1302,12 @@
       toast('OAuth only works on the deployed URL', 'warn');
       return;
     }
-    const url = 'https://openapi.ctrader.com/apps/auth?client_id=' + encodeURIComponent(S.clientId) +
+    const cid = ($('clientIdInput') ? $('clientIdInput').value.trim() : '') || S.clientId;
+    if (!cid) {
+      toast('Please enter your Client ID first', 'err');
+      return;
+    }
+    const url = 'https://openapi.ctrader.com/apps/auth?client_id=' + encodeURIComponent(cid) +
       '&redirect_uri=' + encodeURIComponent(ri) + '&scope=trading';
     log('Opening OAuth with redirect_uri=' + ri, 'info');
     const popup = window.open(url, 'ctrader_oauth', 'width=560,height=700,popup=yes');
@@ -1296,7 +1316,16 @@
 
   function receiveOAuthCode(code) {
     log('OAuth code received — exchanging…', 'info');
-    const body = new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: S.redirectUri || window.location.origin });
+    const params = {
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: S.redirectUri || window.location.origin
+    };
+    const cid = ($('clientIdInput') ? $('clientIdInput').value.trim() : '') || S.clientId;
+    const csec = ($('clientSecretInput') ? $('clientSecretInput').value.trim() : '') || S.clientSecret;
+    if (cid) params.client_id = cid;
+    if (csec) params.client_secret = csec;
+    const body = new URLSearchParams(params);
     exchange(body);
   }
 
@@ -1352,7 +1381,16 @@
 
   function refreshAccessToken() {
     if (!S.refreshToken) { toast('No refresh token — re-authorize', 'err'); return Promise.reject(new Error('no refresh token')); }
-    return postToken(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: S.refreshToken, redirect_uri: S.redirectUri || window.location.origin }))
+    const params = {
+      grant_type: 'refresh_token',
+      refresh_token: S.refreshToken,
+      redirect_uri: S.redirectUri || window.location.origin
+    };
+    const cid = ($('clientIdInput') ? $('clientIdInput').value.trim() : '') || S.clientId;
+    const csec = ($('clientSecretInput') ? $('clientSecretInput').value.trim() : '') || S.clientSecret;
+    if (cid) params.client_id = cid;
+    if (csec) params.client_secret = csec;
+    return postToken(new URLSearchParams(params))
       .then((d) => {
         if (!d.accessToken) throw new Error(oauthError(d) || 'refresh failed');
         S.accessToken = d.accessToken;
@@ -1393,6 +1431,8 @@
     bind();
     // prefill saved prefs
     $('connEnv').value = S.env;
+    if (S.clientId) $('clientIdInput').value = S.clientId;
+    if (S.clientSecret) $('clientSecretInput').value = S.clientSecret;
     if (S.redirectUri) $('connRedirect').value = S.redirectUri;
     if (S.accessToken) $('tokInput').value = S.accessToken;
     populateEASettings();
@@ -1421,6 +1461,8 @@
     });
     $('settingsBtn').addEventListener('click', () => openModal('connModal'));
     $('connEnv').addEventListener('change', (e) => { S.env = e.target.value; localStorage.setItem('ctrader_env', S.env); });
+    $('clientIdInput').addEventListener('input', (e) => { S.clientId = e.target.value.trim(); localStorage.setItem('ctrader_client_id', S.clientId); });
+    $('clientSecretInput').addEventListener('input', (e) => { S.clientSecret = e.target.value.trim(); localStorage.setItem('ctrader_client_secret', S.clientSecret); });
     $('connRedirect').addEventListener('input', (e) => { S.redirectUri = e.target.value; localStorage.setItem('ctrader_redirect', e.target.value); });
     $('accSelect').addEventListener('change', changeAccount);
     $('tokInput').addEventListener('input', (e) => { S.accessToken = e.target.value.trim(); localStorage.setItem('ctrader_access', S.accessToken); });
@@ -1498,8 +1540,8 @@
     }
     // config endpoint may fail on file:// or offline — fall back silently
     fetch('/api/config').then((r) => r.json()).then((d) => {
-      S.clientId = d.clientId || '';
-      S.clientSecret = d.clientSecret || '';
+      if (!S.clientId) S.clientId = d.clientId || '';
+      if (!S.clientSecret) S.clientSecret = d.clientSecret || '';
       init();
       log(S.clientId ? 'Client credentials loaded (' + S.clientId.slice(0, 10) + '…).' : 'Client credentials empty — OAuth / app auth will fail.', S.clientId ? 'ok' : 'err');
     }).catch(() => {

@@ -52,7 +52,8 @@ window.Conn = (function () {
       }
       const creds = this.creds;
       if (!creds.clientId || !creds.clientSecret) {
-        this.log('Missing client credentials. Add them to api/config.js.', 'err');
+        this.log('Missing Client ID or Client Secret. Open Connection Settings to enter them.', 'err');
+        this.status('Credentials required', 'off');
         return;
       }
       this.intentional = false;
@@ -209,7 +210,7 @@ window.Conn = (function () {
           if (TOKEN_ERRORS.some((t) => code.toUpperCase().indexOf(t) !== -1)) {
             this.log('Access token invalid/expired (' + code + ').', 'err');
             if (!this.tokenErrorShown) { this.tokenErrorShown = true; if (this.onTokenError) this.onTokenError(); }
-          } else if (code.toUpperCase() === 'AUTHENTICATION_FAILED' && this.phase !== 'authed') {
+          } else if (code.toUpperCase() === 'AUTHENTICATION_FAILED' || code.toUpperCase() === 'CH_CLIENT_AUTH_FAILURE' || code.toUpperCase() === 'CH_OA_CLIENT_NOT_FOUND') {
             this.authFailed(payload);
           } else {
             this.log('API error [' + code + ']: ' + (payload.description || ''), 'err');
@@ -228,11 +229,10 @@ window.Conn = (function () {
       this.log('Authentication failed [' + payload.errorCode + ']: ' + (payload.description || ''), 'err');
       this.status('Auth failed', 'off');
       this.teardownTimers();
-      if (payload.errorCode === 'AUTHENTICATION_FAILED') {
-        this.log('Check your client ID / secret, then reconnect.', 'warn');
-        this.intentional = true; // don't hot-loop on bad credentials
-      }
+      this.log('Check your client ID / secret in Connection Settings, then reconnect.', 'warn');
+      this.intentional = true; // don't hot-loop on bad credentials
       this.state = 'idle';
+      if (this.onDisconnected) this.onDisconnected('auth_failed');
     },
 
     accountAuth(accountId, token) {
