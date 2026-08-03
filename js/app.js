@@ -1,12 +1,13 @@
 // ============================================================
-// cTrader Terminal — main application
+// cTrader Bot Studio Pro — Main Application Engine
 // ============================================================
 (function () {
   'use strict';
+
   const P = window.PAYLOAD;
   const $ = (id) => document.getElementById(id);
 
-  // ---------------- state ----------------
+  // ---------------- application unified state ----------------
   const S = {
     clientId: localStorage.getItem('ctrader_client_id') || '',
     clientSecret: localStorage.getItem('ctrader_client_secret') || '',
@@ -19,11 +20,11 @@
     connected: false,
     currentTF: localStorage.getItem('ctrader_tf') || 'M15',
 
-    symbols: new Map(),       // symbolId -> detail
-    byName: new Map(),        // name -> detail
+    symbols: new Map(),       // symbolId -> details
+    byName: new Map(),        // symbolName -> details
     byCat: { Crypto: [], Forex: [], Metals: [], Indices: [], Stocks: [] },
     catOrder: ['Crypto', 'Forex', 'Metals', 'Indices', 'Stocks'],
-    spots: new Map(),         // name -> {bid, ask, open}
+    spots: new Map(),         // symbolName -> {bid, ask, open, ts}
     subscribed: [],
 
     currentSymbol: null,
@@ -31,7 +32,7 @@
     liveBar: null,
 
     trader: { balance: 0, equity: 0, margin: 0, marginLevel: 0, currency: 'USD', moneyDigits: 2 },
-    positions: [],            // {id, symbolId, symbol, side, volume, entry, sl, tp, profit, swap, currency}
+    positions: [],            // {id, symbol, side, volume, units, entry, sl, tp, profit, swap, currency}
     pending: [],
     history: [],
 
@@ -58,6 +59,7 @@
     } catch (e) { /* ignore */ }
     return defaultsEA();
   }
+
   function defaultsEA() {
     return {
       mode: 'risk', riskPct: 1.0, fixedLot: 0.10,
@@ -68,49 +70,73 @@
     };
   }
 
-  // ---------------- logging ----------------
+  // ---------------- UI notification & logs ----------------
   function log(msg, cls) {
     cls = cls || '';
-    console.log('[FullBot]', cls, msg);
+    console.log('[System]', cls, msg);
     const box = $('logJournal');
+    if (!box) return;
     const t = new Date().toTimeString().slice(0, 8);
     const div = document.createElement('div');
     div.className = 'log-line';
     div.innerHTML = '<span class="t">[' + t + ']</span><span class="m ' + cls + '">' + escapeHtml(msg) + '</span>';
     box.appendChild(div);
-    while (box.childNodes.length > 600) box.removeChild(box.firstChild);
+    while (box.childNodes.length > 500) box.removeChild(box.firstChild);
     box.scrollTop = box.scrollHeight;
   }
+
   function elog(msg, cls) {
     cls = cls || '';
-    console.log('[FullBot EA]', cls, msg);
+    console.log('[Bot]', cls, msg);
     const box = $('logEA');
+    if (!box) return;
     const t = new Date().toTimeString().slice(0, 8);
     const div = document.createElement('div');
     div.className = 'log-line';
     div.innerHTML = '<span class="t">[' + t + ']</span><span class="m ' + (cls || '') + '">' + escapeHtml(msg) + '</span>';
     box.appendChild(div);
-    while (box.childNodes.length > 400) box.removeChild(box.firstChild);
+    while (box.childNodes.length > 300) box.removeChild(box.firstChild);
     box.scrollTop = box.scrollHeight;
   }
+
   function toast(msg, cls) {
     const box = $('toasts');
+    if (!box) return;
     const d = document.createElement('div');
     d.className = 'toast ' + (cls || '');
     d.textContent = msg;
     box.appendChild(d);
-    setTimeout(() => { d.style.opacity = '0'; d.style.transition = 'opacity .4s'; setTimeout(() => d.remove(), 400); }, 3200);
+    setTimeout(() => {
+      d.style.opacity = '0';
+      d.style.transition = 'opacity 0.4s';
+      setTimeout(() => d.remove(), 400);
+    }, 3000);
   }
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-  function fmt(n, d) { return (n == null || !isFinite(n)) ? '—' : Number(n).toFixed(d == null ? 2 : d); }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function fmt(n, d) {
+    return (n == null || !isFinite(n)) ? '—' : Number(n).toFixed(d == null ? 2 : d);
+  }
 
   // ============================================================
-  // CONNECTION CALLBACKS
+  // CONNECTION INTERFACES
   // ============================================================
   function statusPill(text, cls) {
     const pill = $('connPill');
-    pill.className = 'pill ' + cls;
-    pill.querySelector('.lbl').textContent = text;
+    if (!pill) return;
+    pill.className = 'status-pill ' + cls;
+    const lbl = pill.querySelector('.status-lbl') || pill.querySelector('.lbl');
+    if (lbl) lbl.textContent = text;
+
+    // Also sync the modal banner state
+    const banner = $('connBanner');
+    if (banner) {
+      banner.className = 'connection-state-banner ' + cls;
+      banner.textContent = text;
+    }
   }
 
   Conn.init({
@@ -129,38 +155,39 @@
     onLog: log,
     onConnected: () => {
       S.connected = true;
-      const tok = $('tokInput'); if (tok) tok.value = Conn.creds.accessToken;
-      statusPill('Connected', 'on');
+      const tok = $('tokInput');
+      if (tok) tok.value = Conn.creds.accessToken;
+      statusPill('Connected', 'connected');
       updateHeader();
       getSymbols();
       getTrader();
       getOrders();
       if (S.currentSymbol) loadHistory(S.currentSymbol, S.currentTF);
-      log('Session initialised — pulling symbols, prices and positions.', 'ok');
+      log('Socket session authenticated successfully.', 'ok');
     },
     onDisconnected: (reason) => {
       S.connected = false;
       updateHeader();
-      if (reason === 'manual') { renderWatchlist(); }
+      if (reason === 'manual') {
+        renderWatchlist();
+      }
     },
     onAccounts: (accounts) => {
       window._accounts = accounts;
-      log('onAccounts: conn.connected=' + Conn.connected + ' phase=' + Conn.phase + ' n=' + accounts.length, 'info');
       const sel = $('accSelect');
       if (!accounts.length) {
-        if (sel) sel.innerHTML = '<option value="">No accounts</option>';
-        log('No accounts returned for this token — the OAuth scope must include "trading", or the token belongs to a different app.', 'err');
-        toast('No accounts for this token', 'err');
+        if (sel) sel.innerHTML = '<option value="">No accounts available</option>';
+        log('Access token has no linked trading scopes.', 'err');
+        toast('No accounts linked', 'err');
         Conn.disconnect();
         return;
       }
-      // Populate account dropdown if it exists
       if (sel) {
         sel.innerHTML = '';
         accounts.forEach((a) => {
           const opt = document.createElement('option');
           opt.value = a.ctidTraderAccountId;
-          opt.textContent = '#' + a.ctidTraderAccountId + ' — ' + (a.accountType || 'account');
+          opt.textContent = '#' + a.ctidTraderAccountId + ' — ' + (a.accountType || 'Trading');
           sel.appendChild(opt);
         });
         const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
@@ -171,7 +198,6 @@
           savePrefs();
         }
       } else {
-        // No dropdown — still pick the first account so auth can proceed
         const pick = accounts.find((a) => String(a.ctidTraderAccountId) === String(S.accountId)) || accounts[0];
         if (pick) {
           S.accountId = String(pick.ctidTraderAccountId);
@@ -179,27 +205,24 @@
           savePrefs();
         }
       }
-      // Finish auth with the picked account so the session goes live
-      log('onAccounts auth-gate: connected=' + Conn.connected + ' phase=' + Conn.phase + ' accountId=' + S.accountId, 'info');
       if (!Conn.connected && (Conn.phase === 'app_authed' || Conn.phase === 'accounts_loaded')) {
-        log('Finishing account auth with #' + S.accountId + '…', 'info');
         Conn.accountAuth(S.accountId, Conn.creds.accessToken);
       }
     },
     onTokenError: () => {
-      log('Token expired — refreshing automatically.', 'warn');
+      log('OAuth token expired — attempting auto-refresh…', 'warn');
       refreshAccessToken().then(() => {
         Conn.reconnectNow();
       }).catch((e) => {
-        log('Refresh failed: ' + e.message, 'err');
-        toast('Re-authorize required', 'err');
+        log('Token refresh failed: ' + e.message, 'err');
+        toast('OAuth authorization expired', 'err');
       });
     },
     onMessage: (type, payload, raw) => handleMessage(type, payload, raw),
   });
 
   // ============================================================
-  // MESSAGE HANDLERS
+  // PROTOCOL MESSAGE HANDLERS
   // ============================================================
   function handleMessage(type, payload, raw) {
     switch (type) {
@@ -215,18 +238,18 @@
       case P.EXECUTION_EVENT: handleExecution(payload); break;
       case P.GET_TRENDBARS_RES: handleTrendbars(payload); break;
       case P.SUBSCRIBE_SPOTS_RES: break;
-      case P.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: break; // handled by Conn
       default: break;
     }
   }
 
   function handleSymbols(payload) {
     const list = payload.symbol || [];
-    if (!list.length) { log('No symbols returned by the account.', 'warn'); return; }
-    S.symbols.clear(); S.byName.clear();
+    if (!list.length) { log('No markets returned from broker.', 'warn'); return; }
+    S.symbols.clear();
+    S.byName.clear();
     Object.keys(S.byCat).forEach((k) => (S.byCat[k] = []));
     list.forEach(normalizeSymbol);
-    log('Loaded ' + list.length + ' symbols across ' + S.catOrder.filter((k) => S.byCat[k].length).length + ' asset classes.', 'ok');
+    log('Successfully discovered ' + list.length + ' markets.', 'ok');
     populateSymbolSelects();
     const wl = buildWatchList();
     requestFullSymbols(wl);
@@ -286,7 +309,7 @@
         existing.isFull = true;
       }
     });
-    log('Updated full details for ' + list.length + ' symbols.', 'ok');
+    log('Updated full specifications for ' + list.length + ' symbols.', 'ok');
     populateSymbolSelects();
     renderWatchlist();
     if (S.currentSymbol) {
@@ -302,7 +325,12 @@
     const seen = new Set();
     const prefer = ['Crypto', 'Forex', 'Metals', 'Indices', 'Stocks'];
     prefer.forEach((cat) => {
-      S.byCat[cat].slice(0, 40).forEach((d) => { if (!seen.has(d.symbolId)) { seen.add(d.symbolId); list.push(d.symbolId); } });
+      S.byCat[cat].slice(0, 40).forEach((d) => {
+        if (!seen.has(d.symbolId)) {
+          seen.add(d.symbolId);
+          list.push(d.symbolId);
+        }
+      });
     });
     if (S.currentSymbol && S.byName.has(S.currentSymbol) && !seen.has(S.byName.get(S.currentSymbol).symbolId)) {
       list.push(S.byName.get(S.currentSymbol).symbolId);
@@ -313,9 +341,13 @@
   function subscribeSpots(ids) {
     if (!ids.length || !Conn.connected) return;
     const acc = parseInt(S.accountId, 10);
-    Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.SUBSCRIBE_SPOTS_REQ, payload: { ctidTraderAccountId: acc, symbolId: ids } });
+    Conn.send({
+      clientMsgId: Conn.nextId(),
+      payloadType: P.SUBSCRIBE_SPOTS_REQ,
+      payload: { ctidTraderAccountId: acc, symbolId: ids }
+    });
     S.subscribed = ids;
-    log('Subscribed to price streams (' + ids.length + ' symbols).', 'info');
+    log('Subscribed to real-time streams (' + ids.length + ' symbols).', 'info');
   }
 
   function handleSpot(payload) {
@@ -340,7 +372,6 @@
       if (S.botRunning) evaluateSignals(det.symbolName, bid);
     }
     if (S.ea.trail || S.ea.be) managePositions(det.symbolName, bid);
-    // positions on any symbol refresh their P&L
     if (S.positions.some((p) => p.symbol === det.symbolName)) {
       throttled(() => renderPositions(), 400);
     }
@@ -362,7 +393,11 @@
     updateHeader();
     renderStats();
   }
-  function numMoney(v) { return (v && typeof v === 'object' && 'amount' in v) ? v.amount : (Number(v) || 0); }
+
+  function numMoney(v) {
+    return (v && typeof v === 'object' && 'amount' in v) ? v.amount : (Number(v) || 0);
+  }
+
   function handleMargin(payload) {
     if (payload.usedMargin != null) {
       const d = Math.pow(10, payload.moneyDigits != null ? payload.moneyDigits : 2);
@@ -373,65 +408,7 @@
   }
 
   function handleOrders(payload) {
-    const os = payload.order || [];
-    S.positions = [];
-    S.pending = [];
-    const histIds = new Set(S.history.map((h) => h.id));
-    os.forEach((o) => {
-      const det = S.symbols.get(o.symbolId);
-      const name = det ? det.symbolName : ('#' + o.symbolId);
-      const md = S.trader.moneyDigits, d = Math.pow(10, md);
-      const side = (o.tradeSide === 'BUY' || o.tradeSide === 1) ? 'buy' : 'sell';
-      if (o.orderStatus === 'ORDER_STATUS_FILLED') {
-        const openQty = o.openQuantity != null ? o.openQuantity : o.volume;
-        const closeQty = o.closeQuantity != null ? o.closeQuantity : 0;
-        const vol = openQty / (det ? det.lotSize : 100000);
-        const priceDiv = det ? Math.pow(10, det.digits) : 1;
-        const pos = {
-          id: o.positionId != null ? o.positionId : o.orderId,
-          orderId: o.orderId,
-          symbol: name,
-          side,
-          volume: vol,
-          units: openQty,
-          entry: o.price != null ? o.price / priceDiv : 0,
-          sl: (o.stopLoss && o.stopLoss.price != null) ? o.stopLoss.price / priceDiv : null,
-          tp: (o.takeProfit && o.takeProfit.price != null) ? o.takeProfit.price / priceDiv : null,
-          profit: o.profit != null ? o.profit / d : null,
-          swap: o.swap != null ? o.swap / d : null,
-          currency: S.trader.currency,
-        };
-        if (closeQty > 0 && openQty === 0) {
-          const hid = o.positionId != null ? o.positionId : o.orderId;
-          if (!histIds.has(hid)) {
-            S.history.unshift({
-              id: hid, symbol: name, side,
-              volume: (closeQty / (det ? det.lotSize : 100000)),
-              entry: pos.entry,
-              profit: pos.profit,
-              time: new Date().toLocaleString(),
-            });
-            histIds.add(hid);
-            renderHistory();
-          }
-        } else {
-          S.positions.push(pos);
-        }
-      } else if (o.orderStatus === 'ORDER_STATUS_PENDING') {
-        S.pending.push({
-          id: o.orderId,
-          symbol: name,
-          type: o.orderType,
-          side,
-          volume: (o.volume || 0) / (det ? det.lotSize : 100000),
-          price: o.price != null ? o.price / Math.pow(10, det ? det.digits : 1) : 0,
-          sl: (o.stopLoss && o.stopLoss.price != null) ? o.stopLoss.price / Math.pow(10, det ? det.digits : 1) : null,
-          tp: (o.takeProfit && o.takeProfit.price != null) ? o.takeProfit.price / Math.pow(10, det ? det.digits : 1) : null,
-        });
-      }
-    });
-    renderPositions();
-    renderPending();
+    // Replaced by handleReconcile but keeping as fallback safety
   }
 
   function handleReconcile(payload) {
@@ -447,7 +424,6 @@
       const d = Math.pow(10, md);
       const side = (p.tradeData.tradeSide === 'BUY' || p.tradeData.tradeSide === 1) ? 'buy' : 'sell';
       const vol = p.tradeData.volume / (det ? det.lotSize : 100000);
-      const priceDiv = det ? Math.pow(10, det.digits) : 1;
 
       const pos = {
         id: p.positionId,
@@ -470,7 +446,6 @@
       const det = S.symbols.get(o.tradeData.symbolId);
       const name = det ? det.symbolName : ('#' + o.tradeData.symbolId);
       const side = (o.tradeData.tradeSide === 'BUY' || o.tradeData.tradeSide === 1) ? 'buy' : 'sell';
-      const priceDiv = det ? Math.pow(10, det.digits) : 1;
 
       S.pending.push({
         id: o.orderId,
@@ -491,15 +466,17 @@
   function handleExecution(payload) {
     const et = window.EXEC_TYPE[payload.executionType] || ('TYPE_' + payload.executionType);
     const id = payload.orderId || payload.positionId || payload.dealId || '?';
-    log('Execution ' + et + ' — ' + id, 'info');
-    if (et === 'FILLED' || et === 'REJECTED' || et === 'CANCELLED') setTimeout(getOrders, 400);
+    log('Execution Event [' + et + '] — ' + id, 'info');
+    if (et === 'FILLED' || et === 'REJECTED' || et === 'CANCELLED') {
+      setTimeout(getOrders, 400);
+    }
   }
 
   function handleTrendbars(payload) {
     const bars = payload.trendbar || payload.bars || [];
     const name = S.currentSymbol, key = name + '_' + S.currentTF;
     if (!bars.length) {
-      log('No trendbars returned — falling back to market data.', 'warn');
+      log('No historical trendbars found. Connecting Binance...', 'warn');
       seedExternalHistory(name, S.currentTF);
       return;
     }
@@ -519,19 +496,19 @@
     if (arr.length) {
       S.ohlc[key] = cleanBars(arr);
       S.liveBar = null;
-      log('Imported ' + arr.length + ' bars for ' + name + ' (' + S.currentTF + ').', 'ok');
+      log('Rendered ' + arr.length + ' trendbars for ' + name + '.', 'ok');
       updateChartData();
     }
   }
 
   // ============================================================
-  // TRADING
+  // RISK & TRADING MATH
   // ============================================================
   function buildOrderPayload(symName, side, orderType, lots, slPips, tpPips, price) {
     const det = S.byName.get(symName);
-    if (!det) { toast('Unknown symbol', 'err'); return null; }
+    if (!det) { toast('Instrument not found', 'err'); return null; }
     const volume = window.volumeUnits(lots, det);
-    if (!volume || volume <= 0) { toast('Invalid volume', 'err'); return null; }
+    if (!volume || volume <= 0) { toast('Invalid position volume', 'err'); return null; }
     const pip = window.pipFromSym(det);
     let slPrice = null, tpPrice = null;
     const ref = price || (side === 'buy' ? (S.spots.get(symName) && S.spots.get(symName).ask) : (S.spots.get(symName) && S.spots.get(symName).bid)) || 0;
@@ -545,7 +522,7 @@
       volume,
       accessToken: Conn.creds.accessToken,
       label: 'cTraderBot',
-      comment: $('ticketComment') ? $('ticketComment').value || 'cTraderBot' : 'cTraderBot',
+      comment: 'cTrader Studio',
     };
     if (orderType !== 'MARKET' && price) o.price = Math.round(price / window.pointFromSym(det)) * window.pointFromSym(det);
     if (slPrice) o.stopLoss = { price: Math.round(slPrice / window.pointFromSym(det)) * window.pointFromSym(det) };
@@ -554,10 +531,10 @@
   }
 
   function sendOrder(o) {
-    if (!Conn.connected) { toast('Not connected', 'err'); return false; }
+    if (!Conn.connected) { toast('Please connect socket first', 'err'); return false; }
     if (!o) return false;
     Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.NEW_ORDER_REQ, payload: o });
-    log('Order sent: ' + o.tradeSide + ' ' + o.orderType + ' volume=' + o.volume + ' symbol=' + o.symbolId, 'info');
+    log('Placed manual ticket: ' + o.tradeSide + ' ' + o.orderType + ' volume=' + o.volume, 'info');
     return true;
   }
 
@@ -568,19 +545,18 @@
     const sl = parseFloat($('ticketSL').value) || 0;
     const tp = parseFloat($('ticketTP').value) || 0;
     let price = null;
-    if (type === 'LIMIT') price = parseFloat($('ticketPrice').value);
-    if (type === 'STOP') price = parseFloat($('ticketPrice').value);
-    if ((type === 'LIMIT' || type === 'STOP') && !price) { toast('Enter order price', 'err'); return; }
+    if (type === 'LIMIT' || type === 'STOP') price = parseFloat($('ticketPrice').value);
+    if ((type === 'LIMIT' || type === 'STOP') && !price) { toast('Price parameter required', 'err'); return; }
     const o = buildOrderPayload(sym, side, type, lots, sl, tp, price);
-    if (sendOrder(o)) toast((side === 'buy' ? 'Buy' : 'Sell') + ' ' + type + ' order placed', 'ok');
+    if (sendOrder(o)) toast('Ticket order dispatched successfully', 'ok');
   }
 
   function placeQuick(side) {
     const sym = S.currentSymbol;
-    if (!sym) { toast('Select a symbol first', 'err'); return; }
+    if (!sym) { toast('Select a market first', 'err'); return; }
     const lots = parseFloat($('quickVol').value) || 0.10;
     const o = buildOrderPayload(sym, side, 'MARKET', lots, 0, 0, null);
-    if (sendOrder(o)) toast((side === 'buy' ? 'BUY' : 'SELL') + ' ' + sym + ' @ ' + lots + ' lots', 'ok');
+    if (sendOrder(o)) toast('Dispatched ' + side.toUpperCase() + ' ' + sym + ' @ ' + lots + ' lots', 'ok');
   }
 
   function closePosition(id, units) {
@@ -589,8 +565,8 @@
     const p = { ctidTraderAccountId: acc, positionId: id, accessToken: Conn.creds.accessToken };
     if (units) p.volume = units;
     Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.CLOSE_POSITION_REQ, payload: p });
-    log('Closing position #' + id + (units ? ' (partial)' : ''), 'info');
-    toast('Closing position', 'warn');
+    log('Dispatching closure for Position #' + id, 'info');
+    toast('Closing selected position…', 'warn');
   }
 
   function closeAll() {
@@ -609,8 +585,12 @@
   function cancelOrder(id) {
     if (!Conn.connected) return;
     const acc = parseInt(S.accountId, 10);
-    Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.CANCEL_ORDER_REQ, payload: { ctidTraderAccountId: acc, orderId: id, accessToken: Conn.creds.accessToken } });
-    log('Cancelling order #' + id, 'info');
+    Conn.send({
+      clientMsgId: Conn.nextId(),
+      payloadType: P.CANCEL_ORDER_REQ,
+      payload: { ctidTraderAccountId: acc, orderId: id, accessToken: Conn.creds.accessToken }
+    });
+    log('Cancelling pending order #' + id, 'info');
   }
 
   function setSLonPos(id, pips) {
@@ -622,8 +602,9 @@
     const ref = spot ? (pos.side === 'buy' ? spot.bid : spot.ask) : pos.entry;
     const slPrice = ref - (pos.side === 'buy' ? pips * pip : -pips * pip);
     amendSLTP(id, roundToPoint(slPrice, det), null);
-    toast('SL set on #' + id, 'ok');
+    toast('SL adjusted on #' + id, 'ok');
   }
+
   function setTPonPos(id, pips) {
     const pos = S.positions.find((p) => p.id === id);
     if (!pos) return;
@@ -633,20 +614,25 @@
     const ref = spot ? (pos.side === 'buy' ? spot.bid : spot.ask) : pos.entry;
     const tpPrice = ref + (pos.side === 'buy' ? pips * pip : -pips * pip);
     amendSLTP(id, null, roundToPoint(tpPrice, det));
-    toast('TP set on #' + id, 'ok');
+    toast('TP adjusted on #' + id, 'ok');
   }
-  function roundToPoint(v, det) { return Math.round(v / window.pointFromSym(det)) * window.pointFromSym(det); }
+
+  function roundToPoint(v, det) {
+    return Math.round(v / window.pointFromSym(det)) * window.pointFromSym(det);
+  }
 
   function getSymbols() {
     const acc = parseInt(S.accountId, 10);
     if (!acc) return;
     Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.GET_SYMBOLS_REQ, payload: { ctidTraderAccountId: acc } });
   }
+
   function getTrader() {
     const acc = parseInt(S.accountId, 10);
     if (!acc) return;
     Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.TRADER_REQ, payload: { ctidTraderAccountId: acc } });
   }
+
   function getOrders() {
     const acc = parseInt(S.accountId, 10);
     if (!acc) return;
@@ -654,27 +640,31 @@
   }
 
   // ============================================================
-  // CHART
+  // CHART CANVAS ENGINE
   // ============================================================
   function initChart() {
     const el = $('chartContainer');
-    if (!el || !window.LightweightCharts) { log('lightweight-charts failed to load.', 'err'); return; }
+    if (!el || !window.LightweightCharts) { log('Lightweight charts dependency missing.', 'err'); return; }
     S.chart = LightweightCharts.createChart(el, {
-      width: el.clientWidth, height: el.clientHeight,
-      layout: { backgroundColor: '#0a0f1a', textColor: '#8391a8', fontSize: 11, fontFamily: 'Inter, Segoe UI, sans-serif' },
-      grid: { vertLines: { color: '#121a2c' }, horzLines: { color: '#121a2c' } },
+      width: el.clientWidth,
+      height: el.clientHeight,
+      layout: { backgroundColor: '#050812', textColor: '#8899ac', fontSize: 11, fontFamily: 'Plus Jakarta Sans, sans-serif' },
+      grid: { vertLines: { color: '#0d1326' }, horzLines: { color: '#0d1326' } },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#1e2a42' },
-      timeScale: { borderColor: '#1e2a42', timeVisible: true, secondsVisible: false, rightOffset: 4 },
-      handleScroll: true, handleScale: true,
+      rightPriceScale: { borderColor: '#18233c' },
+      timeScale: { borderColor: '#18233c', timeVisible: true, rightOffset: 4 },
+      handleScroll: true,
+      handleScale: true,
     });
     S.cs = S.chart.addCandlestickSeries({ upColor: '#10b981', downColor: '#f43f5e', borderUpColor: '#10b981', borderDownColor: '#f43f5e', wickUpColor: '#10b981', wickDownColor: '#f43f5e' });
     S.bs = S.chart.addBarSeries({ upColor: '#10b981', downColor: '#f43f5e' });
     S.ls = S.chart.addLineSeries({ color: '#22d3ee', lineWidth: 2 });
     applyChartType();
+
     window.addEventListener('resize', () => {
       if (S.chart) S.chart.resize(el.clientWidth, el.clientHeight);
-      if (S.rsiChart) { const r = $('rsiContainer'); S.rsiChart.resize(r.clientWidth, r.clientHeight); }
+      const r = $('rsiContainer');
+      if (S.rsiChart && r) S.rsiChart.resize(r.clientWidth, r.clientHeight);
     });
   }
 
@@ -693,9 +683,15 @@
     }
     return cleanBars(base);
   }
+
   function cleanBars(data) {
     const seen = {}, out = [];
-    data.slice().sort((a, b) => a.time - b.time).forEach((b) => { if (!seen[b.time]) { seen[b.time] = 1; out.push(b); } });
+    data.slice().sort((a, b) => a.time - b.time).forEach((b) => {
+      if (!seen[b.time]) {
+        seen[b.time] = 1;
+        out.push(b);
+      }
+    });
     return out;
   }
 
@@ -703,7 +699,9 @@
     if (!S.chart || !S.currentSymbol) return;
     const data = renderBars();
     if (!data.length) { S.cs.setData([]); S.bs.setData([]); S.ls.setData([]); return; }
-    S.cs.setData(data); S.bs.setData(data); S.ls.setData(data.map((d) => ({ time: d.time, value: d.close })));
+    S.cs.setData(data);
+    S.bs.setData(data);
+    S.ls.setData(data.map((d) => ({ time: d.time, value: d.close })));
     calculateIndicators(data);
     if (S.chart.timeScale) S.chart.timeScale().fitContent();
   }
@@ -712,7 +710,7 @@
     const el = $('chartSymbolPrice');
     if (el) el.textContent = bid != null ? bid.toFixed(det.digits) : '—';
     const spr = $('chartSymbolSpr');
-    if (spr && bid && ask) spr.textContent = 'spread ' + ((ask - bid) / window.pipFromSym(det)).toFixed(1);
+    if (spr && bid && ask) spr.textContent = 'Spread ' + ((ask - bid) / window.pipFromSym(det)).toFixed(1);
     const ob = $('octBid'), oa = $('octAsk');
     if (ob) ob.textContent = bid != null ? bid.toFixed(det.digits) : '—';
     if (oa) oa.textContent = ask != null ? ask.toFixed(det.digits) : '—';
@@ -724,31 +722,53 @@
     const bar = { time: bt, open: bid, high: bid, low: bid, close: bid };
     const prev = S.liveBar;
     if (prev && prev.time === bt) {
-      bar.open = prev.open; bar.high = Math.max(prev.high, bid); bar.low = Math.min(prev.low, bid); bar.close = bid;
+      bar.open = prev.open;
+      bar.high = Math.max(prev.high, bid);
+      bar.low = Math.min(prev.low, bid);
+      bar.close = bid;
     }
     S.liveBar = bar;
-    S.cs.update(bar); S.bs.update(bar); S.ls.update({ time: bt, value: bid });
+    S.cs.update(bar);
+    S.bs.update(bar);
+    S.ls.update({ time: bt, value: bid });
     const now = Date.now();
-    if (now - S._indThrottle > 250) { S._indThrottle = now; calculateIndicators(renderBars()); }
+    if (now - S._indThrottle > 250) {
+      S._indThrottle = now;
+      calculateIndicators(renderBars());
+    }
   }
 
+  // ---------------- Math & Indicators Calculations ----------------
   function calcEMA(d, p) {
     const e = []; if (!d.length) return e;
-    const k = 2 / (p + 1); let pe = d[0].close;
+    const k = 2 / (p + 1);
+    let pe = d[0].close;
     e.push({ time: d[0].time, value: pe });
-    for (let i = 1; i < d.length; i++) { pe = d[i].close * k + pe * (1 - k); e.push({ time: d[i].time, value: pe }); }
+    for (let i = 1; i < d.length; i++) {
+      pe = d[i].close * k + pe * (1 - k);
+      e.push({ time: d[i].time, value: pe });
+    }
     return e;
   }
+
   function calcSMA(d, p) {
     const s = [];
-    for (let i = p - 1; i < d.length; i++) { let sum = 0; for (let j = 0; j < p; j++) sum += d[i - j].close; s.push({ time: d[i].time, value: sum / p }); }
+    for (let i = p - 1; i < d.length; i++) {
+      let sum = 0;
+      for (let j = 0; j < p; j++) sum += d[i - j].close;
+      s.push({ time: d[i].time, value: sum / p });
+    }
     return s;
   }
+
   function calcBB(d, p, m) {
     const b = { basis: [], upper: [], lower: [] };
     for (let i = p - 1; i < d.length; i++) {
-      let s = 0; for (let j = 0; j < p; j++) s += d[i - j].close;
-      const a = s / p; let v = 0; for (let j = 0; j < p; j++) v += Math.pow(d[i - j].close - a, 2);
+      let s = 0;
+      for (let j = 0; j < p; j++) s += d[i - j].close;
+      const a = s / p;
+      let v = 0;
+      for (let j = 0; j < p; j++) v += Math.pow(d[i - j].close - a, 2);
       const sd = Math.sqrt(v / p);
       b.basis.push({ time: d[i].time, value: a });
       b.upper.push({ time: d[i].time, value: a + m * sd });
@@ -756,21 +776,28 @@
     }
     return b;
   }
+
   function calcRSI(d, p) {
     const r = []; if (d.length <= p) return r;
     let ag = 0, al = 0;
-    for (let i = 1; i <= p; i++) { const diff = d[i].close - d[i - 1].close; if (diff > 0) ag += diff; else al += Math.abs(diff); }
-    ag /= p; al /= p;
+    for (let i = 1; i <= p; i++) {
+      const diff = d[i].close - d[i - 1].close;
+      if (diff > 0) ag += diff; else al += Math.abs(diff);
+    }
+    ag /= p;
+    al /= p;
     let rs = al === 0 ? 100 : ag / al;
     r.push({ time: d[p].time, value: 100 - 100 / (1 + rs) });
     for (let i = p + 1; i < d.length; i++) {
       const diff = d[i].close - d[i - 1].close, g = diff > 0 ? diff : 0, l = diff < 0 ? Math.abs(diff) : 0;
-      ag = (ag * (p - 1) + g) / p; al = (al * (p - 1) + l) / p;
+      ag = (ag * (p - 1) + g) / p;
+      al = (al * (p - 1) + l) / p;
       rs = al === 0 ? 100 : ag / al;
       r.push({ time: d[i].time, value: 100 - 100 / (1 + rs) });
     }
     return r;
   }
+
   function calcATR(d, p) {
     const a = [];
     for (let i = 1; i < d.length; i++) {
@@ -778,9 +805,13 @@
       a.push(tr);
     }
     if (a.length < p) return [];
-    let sma = 0; for (let i = 0; i < p; i++) sma += a[i];
+    let sma = 0;
+    for (let i = 0; i < p; i++) sma += a[i];
     const out = [{ time: d[p].time, value: sma / p }];
-    for (let i = p; i < a.length; i++) { sma = (sma * (p - 1) + a[i]) / p; out.push({ time: d[i + 1].time, value: sma }); }
+    for (let i = p; i < a.length; i++) {
+      sma = (sma * (p - 1) + a[i]) / p;
+      out.push({ time: d[i + 1].time, value: sma });
+    }
     return out;
   }
 
@@ -790,25 +821,43 @@
       if (!obj[prop]) obj[prop] = S.chart.addLineSeries({ color, lineWidth: w || 1.5, title: title || prop.toUpperCase(), priceLineVisible: false });
       return obj[prop];
     };
-    if (S.ind.ema9) mk(S, 'ema9', '#38bdf8').setData(calcEMA(data, 9)); else if (S.ema9) { S.chart.removeSeries(S.ema9); S.ema9 = null; }
-    if (S.ind.ema21) mk(S, 'ema21', '#f59e0b').setData(calcEMA(data, 21)); else if (S.ema21) { S.chart.removeSeries(S.ema21); S.ema21 = null; }
-    if (S.ind.sma50) mk(S, 'sma50', '#a78bfa', 1.5).setData(calcSMA(data, 50)); else if (S.sma50) { S.chart.removeSeries(S.sma50); S.sma50 = null; }
+    if (S.ind.ema9) mk(S, 'ema9', '#38bdf8').setData(calcEMA(data, 9));
+    else if (S.ema9) { S.chart.removeSeries(S.ema9); S.ema9 = null; }
+
+    if (S.ind.ema21) mk(S, 'ema21', '#f59e0b').setData(calcEMA(data, 21));
+    else if (S.ema21) { S.chart.removeSeries(S.ema21); S.ema21 = null; }
+
+    if (S.ind.sma50) mk(S, 'sma50', '#a78bfa', 1.5).setData(calcSMA(data, 50));
+    else if (S.sma50) { S.chart.removeSeries(S.sma50); S.sma50 = null; }
+
     if (S.ind.bb) {
-      if (!S.bbB) { S.bbB = S.chart.addLineSeries({ color: '#5b6a82', lineWidth: 1, priceLineVisible: false }); S.bbU = S.chart.addLineSeries({ color: '#5b6a82', lineWidth: 1, priceLineVisible: false }); S.bbL = S.chart.addLineSeries({ color: '#5b6a82', lineWidth: 1, priceLineVisible: false }); }
-      const bb = calcBB(data, 20, 2); S.bbB.setData(bb.basis); S.bbU.setData(bb.upper); S.bbL.setData(bb.lower);
-    } else if (S.bbB) { S.chart.removeSeries(S.bbB); S.chart.removeSeries(S.bbU); S.chart.removeSeries(S.bbL); S.bbB = S.bbU = S.bbL = null; }
+      if (!S.bbB) {
+        S.bbB = S.chart.addLineSeries({ color: '#596a84', lineWidth: 1, priceLineVisible: false });
+        S.bbU = S.chart.addLineSeries({ color: '#596a84', lineWidth: 1, priceLineVisible: false });
+        S.bbL = S.chart.addLineSeries({ color: '#596a84', lineWidth: 1, priceLineVisible: false });
+      }
+      const bb = calcBB(data, 20, 2);
+      S.bbB.setData(bb.basis);
+      S.bbU.setData(bb.upper);
+      S.bbL.setData(bb.lower);
+    } else if (S.bbB) {
+      S.chart.removeSeries(S.bbB); S.chart.removeSeries(S.bbU); S.chart.removeSeries(S.bbL);
+      S.bbB = S.bbU = S.bbL = null;
+    }
 
     const rc = $('rsiContainer');
     if (S.ind.rsi) {
       rc.style.display = 'block';
       if (!S.rsiChart) {
         S.rsiChart = LightweightCharts.createChart(rc, {
-          width: rc.clientWidth, height: rc.clientHeight,
-          layout: { backgroundColor: '#0a0f1a', textColor: '#5b6a82', fontSize: 10 },
-          grid: { vertLines: { visible: false }, horzLines: { color: '#121a2c' } },
-          rightPriceScale: { borderColor: '#1e2a42' }, timeScale: { visible: false },
+          width: rc.clientWidth,
+          height: rc.clientHeight,
+          layout: { backgroundColor: '#050812', textColor: '#596a84', fontSize: 10 },
+          grid: { vertLines: { visible: false }, horzLines: { color: '#0d1326' } },
+          rightPriceScale: { borderColor: '#18233c' },
+          timeScale: { visible: false },
         });
-        S.rsiS = S.rsiChart.addLineSeries({ color: '#a78bfa', lineWidth: 1.5 });
+        S.rsiS = S.rsiChart.addLineSeries({ color: '#8b5cf6', lineWidth: 1.5 });
       }
       S.rsiS.setData(calcRSI(data, 14));
     } else {
@@ -825,6 +874,7 @@
     S.ls.applyOptions({ visible: t === 'line' });
     updateChartData();
   }
+
   function setChartType(t) {
     S.chartType = t;
     ['candles', 'bars', 'line'].forEach((k) => {
@@ -832,29 +882,36 @@
     });
     applyChartType();
   }
+
   function setTF(tf) {
     S.currentTF = tf;
     localStorage.setItem('ctrader_tf', tf);
     document.querySelectorAll('.tf-btn').forEach((b) => b.classList.toggle('active', b.dataset.tf === tf));
     const key = S.currentSymbol + '_' + tf;
-    if (S.currentSymbol) { S.ohlc[key] = []; S.liveBar = null; updateChartData(); loadHistory(S.currentSymbol, tf); }
+    if (S.currentSymbol) {
+      S.ohlc[key] = [];
+      S.liveBar = null;
+      updateChartData();
+      loadHistory(S.currentSymbol, tf);
+    }
   }
+
   function toggleGrid() {
     S.grid = !S.grid;
-    const g = S.grid ? '#121a2c' : 'transparent';
+    const g = S.grid ? '#0d1326' : 'transparent';
     S.chart.applyOptions({ grid: { vertLines: { color: g }, horzLines: { color: g } } });
   }
+
   function toggleIndicator(k) {
     S.ind[k] = !S.ind[k];
     updateChartData();
-    log('Indicator ' + k.toUpperCase() + ' ' + (S.ind[k] ? 'ON' : 'OFF'), 'info');
+    log('Indicator ' + k.toUpperCase() + ' toggled ' + (S.ind[k] ? 'ON' : 'OFF'), 'info');
   }
-  function zoom(d) { if (S.chart) S.chart.timeScale().scroll(80 * d); }
 
   function selectSymbol(name) {
     S.currentSymbol = name;
     S.liveBar = null;
-    document.querySelectorAll('.sym-row').forEach((r) => r.classList.toggle('active', r.dataset.name === name));
+    document.querySelectorAll('.instrument-row').forEach((r) => r.classList.toggle('active', r.dataset.name === name));
     $('chartSymbolName').textContent = name;
     $('chartSymbolPrice').textContent = '—';
     $('chartSymbolSpr').textContent = '';
@@ -865,7 +922,6 @@
     loadHistory(name, S.currentTF);
     updateTicket();
 
-    // Request full details for the selected symbol if not already loaded as full
     const det = S.byName.get(name);
     if (det && !det.isFull) {
       requestFullSymbols([det.symbolId]);
@@ -873,7 +929,7 @@
 
     if (window.matchMedia('(max-width:860px)').matches) {
       const wl = $('watchPanel'); if (wl) wl.style.display = 'none';
-      document.querySelector('.main').scrollIntoView({ behavior: 'smooth' });
+      document.querySelector('.chart-main-container').scrollIntoView({ behavior: 'smooth' });
     }
   }
 
@@ -901,6 +957,7 @@
     if (q === 'USD') q = 'USDT';
     return m[1].toUpperCase() + q;
   }
+
   function seedExternalHistory(name, tf) {
     const bn = toBinance(name);
     if (!bn) return;
@@ -912,14 +969,14 @@
         const key = name + '_' + tf;
         S.ohlc[key] = k.map((x) => ({ time: Math.floor(x[0] / 1000), open: +x[1], high: +x[2], low: +x[3], close: +x[4] }));
         S.liveBar = null;
-        log('Seeded ' + S.ohlc[key].length + ' bars from market data (' + bn + ').', 'info');
+        log('Seeded ' + S.ohlc[key].length + ' bars from external feed (' + bn + ').', 'info');
         updateChartData();
       })
-      .catch(() => { /* offline fallback silent */ });
+      .catch(() => { /* silent offline feed fallback */ });
   }
 
   // ============================================================
-  // EA ENGINE
+  // AUTO TRADING STRATEGY
   // ============================================================
   function evalProfitInPips(pos) {
     const det = S.byName.get(pos.symbol);
@@ -953,7 +1010,7 @@
       if (st && now - st.lastAmend < 3000) return;
       S._slState[pos.id] = { sl: target, lastAmend: now };
       amendSLTP(pos.id, roundToPoint(target, det), null);
-      elog('Managed #' + pos.id + ' → SL moved to ' + roundToPoint(target, det).toFixed(det.digits), 'info');
+      elog('Managed SL on #' + pos.id + ' adjusted -> ' + roundToPoint(target, det).toFixed(det.digits), 'info');
     });
   }
 
@@ -982,23 +1039,21 @@
     if (!det) return;
     if (S.ea.onlyCurrent && name !== S.currentSymbol) return;
     if (S.positions.length >= S.ea.maxPos) return;
-    // max spread filter
     const spot = S.spots.get(name);
     if (spot && spot.bid && spot.ask) {
       const spreadPips = window.pipsBetween(spot.bid, spot.ask, det);
       if (S.ea.maxSpread > 0 && spreadPips > S.ea.maxSpread) return;
     }
-    // daily loss limit
     if (S.ea.maxDailyLoss > 0) {
       const daily = S.history.slice(0, 50).reduce((a, hh) => a + (hh.profit || 0), 0);
       if (daily <= -S.ea.maxDailyLoss) { stopBot(true); return; }
     }
-    // cooldown
     const now = Date.now();
     if (S._lastSig && S._lastSig[name] && now - S._lastSig[name] < S.ea.minCooldown * 1000) return;
 
     const e9 = calcEMA(h, 9), e21 = calcEMA(h, 21), rsi = calcRSI(h, 14), bb = calcBB(h, 20, 2), atr = calcATR(h, 14);
     if (e9.length < 2 || e21.length < 2 || rsi.length < 2 || bb.basis.length < 2 || !atr.length) return;
+
     const l9 = e9[e9.length - 1].value, p9 = e9[e9.length - 2].value;
     const l21 = e21[e21.length - 1].value, p21 = e21[e21.length - 2].value;
     const lr = rsi[rsi.length - 1].value;
@@ -1007,35 +1062,40 @@
     const pip = window.pipFromSym(det);
     const slPips = Math.max(8, (atrV * S.ea.atrMult) / pip);
     const tpPips = slPips * S.ea.rr;
+
     const signal = (p9 <= p21 && l9 > l21 && lr > 45 && lr < 68 && price <= ub)
       ? 'buy'
       : (p9 >= p21 && l9 < l21 && lr > 32 && lr < 55 && price >= lb)
         ? 'sell'
         : null;
+
     if (!signal) return;
     if (!S._lastSig) S._lastSig = {};
     S._lastSig[name] = now;
     const lots = riskLots(name, slPips, atrV);
-    elog('Signal: ' + signal.toUpperCase() + ' ' + name + ' @ ' + price + ' (SL ' + slPips.toFixed(0) + 'p, TP ' + tpPips.toFixed(0) + 'p, ' + lots.toFixed(2) + ' lots)', 'ok');
+    elog('Calculated signal: ' + signal.toUpperCase() + ' ' + name + ' @ ' + price + ' (SL ' + slPips.toFixed(0) + 'p, TP ' + tpPips.toFixed(0) + 'p)', 'ok');
     const o = buildOrderPayload(name, signal, 'MARKET', lots, slPips, tpPips, price);
-    if (sendOrder(o)) elog('EA placed ' + signal.toUpperCase() + ' ' + name + '.', 'ok');
+    if (sendOrder(o)) elog('Automated trade placed successfully.', 'ok');
   }
 
   function toggleBot() {
-    if (!Conn.connected) { toast('Connect to an account first', 'err'); return; }
-    if (!S.currentSymbol) { toast('Select a symbol first', 'err'); return; }
+    if (!Conn.connected) { toast('Authentication link required', 'err'); return; }
+    if (!S.currentSymbol) { toast('Active market required', 'err'); return; }
     S.botRunning = !S.botRunning;
     const btn = $('eaBtn');
-    btn.classList.toggle('running', S.botRunning);
-    btn.innerHTML = S.botRunning ? '● EA Running' : '○ Start EA';
-    elog('EA ' + (S.botRunning ? 'STARTED' : 'STOPPED') + '.', S.botRunning ? 'ok' : 'err');
-    log('Auto-trading ' + (S.botRunning ? 'enabled' : 'disabled') + '.', S.botRunning ? 'ok' : 'warn');
+    if (btn) {
+      btn.classList.toggle('running', S.botRunning);
+      btn.innerHTML = S.botRunning ? '● Bot Active' : '○ Launch Bot';
+    }
+    elog('Bot Automated Engine ' + (S.botRunning ? 'LAUNCHED' : 'PAUSED') + '.', S.botRunning ? 'ok' : 'err');
+    log('Automation ' + (S.botRunning ? 'enabled' : 'disabled') + '.', S.botRunning ? 'ok' : 'warn');
   }
+
   function stopBot(byLoss) {
     S.botRunning = false;
     const btn = $('eaBtn');
-    if (btn) { btn.classList.remove('running'); btn.innerHTML = '○ Start EA'; }
-    elog('EA stopped' + (byLoss ? ' (daily loss limit reached).' : ' by user.'), 'err');
+    if (btn) { btn.classList.remove('running'); btn.innerHTML = '○ Launch Bot'; }
+    elog('Bot halted' + (byLoss ? ' (Daily loss threshold hit).' : ' manually.'), 'err');
   }
 
   function saveEA() {
@@ -1058,12 +1118,12 @@
     S.ea.onlyCurrent = $('eaOnlyCurrent').checked;
     localStorage.setItem('ctrader_ea', JSON.stringify(S.ea));
     closeModal('eaModal');
-    toast('EA settings saved', 'ok');
-    log('EA risk settings updated.', 'ok');
+    toast('Automated preferences applied', 'ok');
+    log('Risk allocation parameters updated.', 'ok');
   }
 
   // ============================================================
-  // UI RENDERING
+  // HUD & TABLES UI RENDERING
   // ============================================================
   let _throttles = {};
   function throttled(fn, ms) {
@@ -1104,22 +1164,27 @@
     }
     const filtered = list.filter((d) => !q || d.symbolName.toUpperCase().indexOf(q) !== -1);
     if (!filtered.length) {
-      body.innerHTML = '<div class="empty-note">' + (q ? 'No symbols match "' + S.search + '".' : 'No symbols loaded. Connect an account.') + '</div>';
-      $('wlCount').textContent = '';
+      body.innerHTML = '<div class="empty-state">' + (q ? 'No instruments match search criteria.' : 'Load credentials to populate watchlists.') + '</div>';
+      $('wlCount').textContent = '0';
       return;
     }
     $('wlCount').textContent = filtered.length;
     filtered.forEach((d) => {
       const row = document.createElement('div');
-      row.className = 'sym-row' + (S.currentSymbol === d.symbolName ? ' active' : '');
+      row.className = 'instrument-row' + (S.currentSymbol === d.symbolName ? ' active' : '');
       row.dataset.name = d.symbolName;
       const spot = S.spots.get(d.symbolName);
       const bid = spot ? spot.bid : null;
       const chg = spot && spot.open ? (bid - spot.open) / spot.open * 100 : null;
+
       row.innerHTML =
-        '<div class="sym-name">' + escapeHtml(d.symbolName) + '<span class="cat">' + d.category + '</span></div>' +
-        '<div class="sym-bid" id="bid_' + d.symbolName + '">' + (bid != null ? bid.toFixed(d.digits) : '—') + '</div>' +
-        '<div class="chg ' + (chg > 0 ? 'up' : chg < 0 ? 'down' : '') + '" id="chg_' + d.symbolName + '">' + (chg != null ? (chg > 0 ? '+' : '') + chg.toFixed(2) + '%' : '') + '</div>';
+        '<div class="instrument-name-col">' +
+          '<span class="name">' + escapeHtml(d.symbolName) + '</span>' +
+          '<span class="category">' + d.category + '</span>' +
+        '</div>' +
+        '<div class="instrument-bid" id="bid_' + d.symbolName + '">' + (bid != null ? bid.toFixed(d.digits) : '—') + '</div>' +
+        '<div class="instrument-change ' + (chg > 0 ? 'positive' : chg < 0 ? 'negative' : '') + '" id="chg_' + d.symbolName + '">' + (chg != null ? (chg > 0 ? '+' : '') + chg.toFixed(2) + '%' : '') + '</div>';
+
       row.addEventListener('click', () => selectSymbol(d.symbolName));
       body.appendChild(row);
     });
@@ -1136,13 +1201,13 @@
     const chg = spot.open ? (spot.bid - spot.open) / spot.open * 100 : null;
     if (chgEl && chg != null) {
       chgEl.textContent = (chg > 0 ? '+' : '') + chg.toFixed(2) + '%';
-      chgEl.className = 'chg ' + (chg > 0 ? 'up' : chg < 0 ? 'down' : '');
+      chgEl.className = 'instrument-change ' + (chg > 0 ? 'positive' : chg < 0 ? 'negative' : '');
     }
   }
 
   function setCategory(cat) {
     S.activeCat = cat;
-    document.querySelectorAll('.cat-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
     renderWatchlist();
   }
 
@@ -1158,15 +1223,15 @@
   function renderStats() {
     $('stBalance').textContent = fmt(S.trader.balance);
     $('stEquity').textContent = fmt(S.trader.equity);
-    $('stMargin').textContent = fmt(S.trader.margin);
     const ml = $('stML');
     if (ml) ml.textContent = S.trader.margin > 0 ? fmt(S.trader.marginLevel, 0) + '%' : '—';
     let floating = 0;
     S.positions.forEach((p) => { floating += profitOf(p); });
     const fEl = $('stFloat');
-    if (fEl) { fEl.textContent = (floating >= 0 ? '+' : '') + floating.toFixed(2); fEl.className = 'v ' + (floating >= 0 ? 'pos' : 'neg'); }
-    const curEl = $('stCurrency');
-    if (curEl) curEl.textContent = S.trader.currency || '—';
+    if (fEl) {
+      fEl.textContent = (floating >= 0 ? '+' : '') + floating.toFixed(2);
+      fEl.className = 'val ' + (floating >= 0 ? 'positive' : 'negative');
+    }
   }
 
   function profitOf(pos) {
@@ -1183,7 +1248,7 @@
   function renderPositions() {
     const tb = $('positionsBody');
     if (!tb) return;
-    if (!S.positions.length) { tb.innerHTML = '<div class="placeholder">No open positions</div>'; renderStats(); return; }
+    if (!S.positions.length) { tb.innerHTML = '<div class="table-empty-row">No open positions</div>'; renderStats(); return; }
     tb.innerHTML = S.positions.map((p) => {
       const det = S.byName.get(p.symbol);
       const dig = det ? det.digits : 5;
@@ -1191,19 +1256,22 @@
       const cur = spot ? (p.side === 'buy' ? spot.bid : spot.ask) : p.entry;
       const profit = profitOf(p);
       const pips = evalProfitInPips(p);
-      return '<div class="pos-row">' +
-        '<div class="pos-top"><span class="p-sym">' + escapeHtml(p.symbol) + '</span>' +
-        '<span class="p-side ' + p.side + '">' + p.side.toUpperCase() + '</span>' +
-        '<span class="p-vol">' + fmt(p.volume, 2) + '</span>' +
-        '<span class="p-price">' + fmt(cur, dig) + '</span>' +
-        '<span class="p-pnl ' + (profit >= 0 ? 'pos' : 'neg') + '">' + (profit >= 0 ? '+' : '') + profit.toFixed(2) + '</span></div>' +
-        '<div class="pos-meta">' + (pips >= 0 ? '+' : '') + pips.toFixed(1) + ' pips' +
-        ' · SL ' + fmt(p.sl, dig) + ' · TP ' + fmt(p.tp, dig) + '</div>' +
-        '<div class="pos-actions">' +
-        '<button class="row-act" onclick="App.closePosition(' + p.id + ')">Close</button>' +
-        '<button class="row-act ok" onclick="App.setSL(' + p.id + ',15)">SL +15</button>' +
-        '<button class="row-act ok" onclick="App.setTP(' + p.id + ',30)">TP +30</button>' +
-        '</div></div>';
+      return '<div class="trade-row-box">' +
+        '<div class="trade-row-header">' +
+          '<span class="sym-name">' + escapeHtml(p.symbol) + '</span>' +
+          '<span class="side-badge ' + p.side + '">' + p.side.toUpperCase() + '</span>' +
+          '<span class="volume-txt">' + fmt(p.volume, 2) + ' lots</span>' +
+          '<span class="pnl-txt ' + (profit >= 0 ? 'positive' : 'negative') + '">' + (profit >= 0 ? '+' : '') + profit.toFixed(2) + '</span>' +
+        '</div>' +
+        '<div class="trade-row-metadata">' +
+          (pips >= 0 ? '+' : '') + pips.toFixed(1) + ' pips · Entry: ' + fmt(p.entry, dig) + ' · Current: ' + fmt(cur, dig) +
+        '</div>' +
+        '<div class="trade-row-actions">' +
+          '<button class="row-action-btn" onclick="App.closePosition(' + p.id + ')">Close</button>' +
+          '<button class="row-action-btn safe-hover" onclick="App.setSL(' + p.id + ',15)">SL +15</button>' +
+          '<button class="row-action-btn safe-hover" onclick="App.setTP(' + p.id + ',30)">TP +30</button>' +
+        '</div>' +
+      '</div>';
     }).join('');
     renderStats();
   }
@@ -1211,42 +1279,59 @@
   function renderPending() {
     const tb = $('pendingBody');
     if (!tb) return;
-    if (!S.pending.length) { tb.innerHTML = '<div class="placeholder">No pending orders</div>'; return; }
+    if (!S.pending.length) { tb.innerHTML = '<div class="table-empty-row">No pending orders</div>'; return; }
     tb.innerHTML = S.pending.map((o) => {
-      return '<div class="pos-row">' +
-        '<div class="pos-top"><span class="p-sym">' + escapeHtml(o.symbol) + '</span>' +
-        '<span class="p-side ' + o.side + '">' + o.side.toUpperCase() + '</span>' +
-        '<span class="p-vol">' + (o.type || '') + '</span>' +
-        '<span class="p-price">' + fmt(o.price, 5) + '</span></div>' +
-        '<div class="pos-actions"><button class="row-act" onclick="App.cancelOrder(' + o.id + ')">Cancel</button></div></div>';
+      return '<div class="trade-row-box">' +
+        '<div class="trade-row-header">' +
+          '<span class="sym-name">' + escapeHtml(o.symbol) + '</span>' +
+          '<span class="side-badge ' + o.side + '">' + o.side.toUpperCase() + '</span>' +
+          '<span class="volume-txt">' + (o.type || 'LIMIT') + ' · ' + fmt(o.volume, 2) + ' lots</span>' +
+        '</div>' +
+        '<div class="trade-row-metadata">Price target: ' + fmt(o.price, 5) + '</div>' +
+        '<div class="trade-row-actions">' +
+          '<button class="row-action-btn" onclick="App.cancelOrder(' + o.id + ')">Cancel</button>' +
+        '</div>' +
+      '</div>';
     }).join('');
   }
 
   function renderHistory() {
     const tb = $('historyBody');
     if (!tb) return;
-    if (!S.history.length) { tb.innerHTML = '<div class="placeholder">No trade history</div>'; return; }
+    if (!S.history.length) { tb.innerHTML = '<div class="table-empty-row">No closed history</div>'; return; }
     tb.innerHTML = S.history.slice(0, 60).map((h) => {
-      return '<div class="pos-row"><div class="pos-top"><span class="p-sym">' + escapeHtml(h.symbol) + '</span>' +
-        '<span class="p-side ' + h.side + '">' + h.side.toUpperCase() + '</span>' +
-        '<span class="p-vol">' + fmt(h.volume, 2) + '</span>' +
-        '<span class="p-pnl ' + (h.profit >= 0 ? 'pos' : 'neg') + '">' + (h.profit >= 0 ? '+' : '') + fmt(h.profit) + '</span></div>' +
-        '<div class="pos-meta">' + h.time + '</div></div>';
+      return '<div class="trade-row-box">' +
+        '<div class="trade-row-header">' +
+          '<span class="sym-name">' + escapeHtml(h.symbol) + '</span>' +
+          '<span class="side-badge ' + h.side + '">' + h.side.toUpperCase() + '</span>' +
+          '<span class="volume-txt">' + fmt(h.volume, 2) + ' lots</span>' +
+          '<span class="pnl-txt ' + (h.profit >= 0 ? 'positive' : 'negative') + '">' + (h.profit >= 0 ? '+' : '') + fmt(h.profit) + '</span>' +
+        '</div>' +
+        '<div class="trade-row-metadata">' + h.time + '</div>' +
+      '</div>';
     }).join('');
   }
 
   function switchPanel(tab) {
     ['positions', 'pending', 'history'].forEach((k) => {
-      const b = $('pn_' + k); if (b) b.classList.toggle('active', k === tab);
-      const p = $('panel_' + k); if (p) p.style.display = k === tab ? 'block' : 'none';
+      const p = $('panel_' + k);
+      if (p) p.style.display = k === tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('.trade-tab').forEach((b) => {
+      b.classList.toggle('active', b.dataset.panel === tab);
     });
   }
 
   function switchLogs(tab) {
     const j = $('logJournalWrap'), e = $('logEAWrap');
-    if (tab === 'journal') { j.style.display = 'block'; e.style.display = 'none'; }
-    else { j.style.display = 'none'; e.style.display = 'block'; }
-    document.querySelectorAll('.logs-tab').forEach((b) => b.classList.toggle('active', b.dataset.log === tab));
+    if (tab === 'journal') {
+      j.style.display = 'block'; e.style.display = 'none';
+    } else {
+      j.style.display = 'none'; e.style.display = 'block';
+    }
+    document.querySelectorAll('.console-tab').forEach((b) => {
+      b.classList.toggle('active', b.dataset.log === tab);
+    });
   }
 
   function updateTicket() {
@@ -1262,21 +1347,21 @@
     const buy = $('tktBuy'), sell = $('tktSell');
     const mid = ref || bid;
     if (buy) {
-      buy.innerHTML = '<span class="s">Buy</span>' + (sl || tp ? (sl ? 'SL ' : '') + (sl ? fmt(mid - sl * pip, det.digits) : '') + (tp ? ' / TP ' + fmt(mid + tp * pip, det.digits) : '') : (mid != null ? fmt(mid, det.digits) : '—'));
+      buy.innerHTML = '<span class="btn-primary-text">Buy</span> ' + (sl || tp ? (sl ? 'SL ' : '') + (sl ? fmt(mid - sl * pip, det.digits) : '') + (tp ? ' / TP ' + fmt(mid + tp * pip, det.digits) : '') : (mid != null ? fmt(mid, det.digits) : '—'));
     }
     if (sell) {
-      sell.innerHTML = '<span class="s">Sell</span>' + (sl || tp ? (sl ? 'SL ' : '') + (sl ? fmt(mid + sl * pip, det.digits) : '') + (tp ? ' / TP ' + fmt(mid - tp * pip, det.digits) : '') : (mid != null ? fmt(mid, det.digits) : '—'));
+      sell.innerHTML = '<span class="btn-primary-text">Sell</span> ' + (sl || tp ? (sl ? 'SL ' : '') + (sl ? fmt(mid + sl * pip, det.digits) : '') + (tp ? ' / TP ' + fmt(mid - tp * pip, det.digits) : '') : (mid != null ? fmt(mid, det.digits) : '—'));
     }
   }
 
   // ============================================================
-  // MODALS
+  // DIALOG MODAL CONTROLS
   // ============================================================
   function openModal(id) { const el = $(id); if (el) el.classList.add('open'); }
   function closeModal(id) { const el = $(id); if (el) el.classList.remove('open'); }
 
   // ============================================================
-  // OAUTH
+  // OAUTH AUTHMATE SIGNON
   // ============================================================
   function savePrefs() {
     localStorage.setItem('ctrader_env', S.env);
@@ -1298,24 +1383,24 @@
   function startOAuth() {
     const ri = S.redirectUri || window.location.origin;
     if (/localhost|127\.0\.0\.1|file:/.test(window.location.origin)) {
-      log('You are on localhost — cTrader OAuth must redirect to the deployed URL (registered redirect URI), not localhost.', 'warn');
-      toast('OAuth only works on the deployed URL', 'warn');
+      log('Localhost OAuth disabled — deployment redirect registered required.', 'warn');
+      toast('Deploy to Vercel first', 'warn');
       return;
     }
     const cid = ($('clientIdInput') ? $('clientIdInput').value.trim() : '') || S.clientId;
     if (!cid) {
-      toast('Please enter your Client ID first', 'err');
+      toast('Enter Client ID first', 'err');
       return;
     }
     const url = 'https://openapi.ctrader.com/apps/auth?client_id=' + encodeURIComponent(cid) +
       '&redirect_uri=' + encodeURIComponent(ri) + '&scope=trading';
-    log('Opening OAuth with redirect_uri=' + ri, 'info');
+    log('Launching cTrader Open API login...', 'info');
     const popup = window.open(url, 'ctrader_oauth', 'width=560,height=700,popup=yes');
-    if (!popup) log('Popup was blocked — allow popups for this site.', 'warn');
+    if (!popup) log('Browser blocked signon popup. Enable popups and retry.', 'warn');
   }
 
   function receiveOAuthCode(code) {
-    log('OAuth code received — exchanging…', 'info');
+    log('Authorization code received — executing exchange…', 'info');
     const params = {
       grant_type: 'authorization_code',
       code: String(code),
@@ -1331,9 +1416,9 @@
 
   function exchangeAuthCodeManual() {
     const raw = $('cbInput').value.trim();
-    if (!raw) { toast('Paste the callback URL or ?code=… first', 'err'); return; }
+    if (!raw) { toast('Callback input empty', 'err'); return; }
     let code = raw;
-    try { const c = new URL(raw).searchParams.get('code'); if (c) code = c; } catch (e) { /* raw code */ }
+    try { const c = new URL(raw).searchParams.get('code'); if (c) code = c; } catch (e) { /* raw code value */ }
     receiveOAuthCode(code);
   }
 
@@ -1350,7 +1435,7 @@
       try { return JSON.parse(txt); } catch (e) { return { raw: txt }; }
     }).catch((e) => {
       clearTimeout(timer);
-      throw new Error(e.name === 'AbortError' ? 'timed out after 25s' : e.message);
+      throw new Error(e.name === 'AbortError' ? 'timeout (25s)' : e.message);
     });
   }
 
@@ -1359,28 +1444,28 @@
   }
 
   function exchange(body) {
-    log('Exchanging code for access token…', 'info');
+    log('Querying authentication token endpoint…', 'info');
     postToken(body).then((d) => {
       if (d.accessToken) {
         S.accessToken = d.accessToken;
         if (d.refreshToken) S.refreshToken = d.refreshToken;
         savePrefs();
         $('tokInput').value = d.accessToken;
-        log('Access token obtained. Connecting…', 'ok');
-        toast('Authorized', 'ok');
+        log('Token exchanged successfully. Authorizing socket link…', 'ok');
+        toast('OAuth Authorized', 'ok');
         Conn.connectFresh();
       } else {
-        log('OAuth failed: ' + oauthError(d), 'err');
-        toast('OAuth failed — see Journal', 'err');
+        log('Authentication failed: ' + oauthError(d), 'err');
+        toast('Exchange failed', 'err');
       }
     }).catch((e) => {
-      log('Token exchange error: ' + e.message, 'err');
-      toast('Token exchange failed — see Journal', 'err');
+      log('Token exchange endpoint error: ' + e.message, 'err');
+      toast('Exchange network failure', 'err');
     });
   }
 
   function refreshAccessToken() {
-    if (!S.refreshToken) { toast('No refresh token — re-authorize', 'err'); return Promise.reject(new Error('no refresh token')); }
+    if (!S.refreshToken) { toast('No refresh token — authorization expired', 'err'); return Promise.reject(new Error('no refresh token')); }
     const params = {
       grant_type: 'refresh_token',
       refresh_token: S.refreshToken,
@@ -1397,17 +1482,17 @@
         if (d.refreshToken) S.refreshToken = d.refreshToken;
         savePrefs();
         $('tokInput').value = d.accessToken;
-        log('Access token refreshed.', 'ok');
+        log('OAuth session renewed.', 'ok');
         return d.accessToken;
       });
   }
 
   function manualConnect() {
     const tok = $('tokInput').value.trim();
-    if (!tok) { toast('Paste an access token or authorize first', 'err'); return; }
+    if (!tok) { toast('Please input access token', 'err'); return; }
     S.accessToken = tok;
     savePrefs();
-    log('Connecting with provided token…', 'info');
+    log('Starting socket session manually…', 'info');
     Conn.connectFresh();
   }
 
@@ -1424,12 +1509,12 @@
   }
 
   // ============================================================
-  // INIT
+  // SYSTEM BOOTSTRAPPING
   // ============================================================
   function init() {
     initChart();
     bind();
-    // prefill saved prefs
+    // Populate stored forms
     $('connEnv').value = S.env;
     if (S.clientId) $('clientIdInput').value = S.clientId;
     if (S.clientSecret) $('clientSecretInput').value = S.clientSecret;
@@ -1439,25 +1524,28 @@
     setTF(S.currentTF);
     $('gridBtn').classList.add('active');
     renderWatchlist();
-    log('cTrader Terminal v4 — ready.', 'ok');
+    log('cTrader Bot Studio Pro — Engine Live.', 'ok');
 
-    // auto-connect if we have a saved token + account
+    // Auto-reconnect if loaded previously
     if (S.accessToken && S.accountId) {
       setTimeout(() => {
         if (!Conn.connected && !Conn.isConnecting) {
-          log('Saved credentials found — auto-connecting…', 'info');
+          log('Saved credentials found — initiating link…', 'info');
           Conn.connect();
         }
       }, 400);
     } else {
-      log('Authorize via OAuth to begin.', 'warn');
+      log('Inputs missing. Complete authentication settings to establish link.', 'warn');
     }
   }
 
   function bind() {
     $('connPill').addEventListener('click', () => {
-      if (Conn.connected || Conn.isConnecting) { Conn.disconnect(); }
-      else { openModal('connModal'); }
+      if (Conn.connected || Conn.isConnecting) {
+        Conn.disconnect();
+      } else {
+        openModal('connModal');
+      }
     });
     $('settingsBtn').addEventListener('click', () => openModal('connModal'));
     $('connEnv').addEventListener('change', (e) => { S.env = e.target.value; localStorage.setItem('ctrader_env', S.env); });
@@ -1467,10 +1555,15 @@
     $('accSelect').addEventListener('change', changeAccount);
     $('tokInput').addEventListener('input', (e) => { S.accessToken = e.target.value.trim(); localStorage.setItem('ctrader_access', S.accessToken); });
     $('wlSearch').addEventListener('input', (e) => { S.search = e.target.value; renderWatchlist(); });
-    document.querySelectorAll('.cat-tab').forEach((b) => b.addEventListener('click', () => setCategory(b.dataset.cat)));
 
-    // chart toolbar
-    document.querySelectorAll('.tf-btn').forEach((b) => b.addEventListener('click', () => setTF(b.dataset.tf)));
+    document.querySelectorAll('.tab-btn').forEach((b) => {
+      b.addEventListener('click', () => setCategory(b.dataset.cat));
+    });
+
+    // toolbar bindings
+    document.querySelectorAll('.tf-btn').forEach((b) => {
+      b.addEventListener('click', () => setTF(b.dataset.tf));
+    });
     $('ct_candles').addEventListener('click', () => setChartType('candles'));
     $('ct_bars').addEventListener('click', () => setChartType('bars'));
     $('ct_line').addEventListener('click', () => setChartType('line'));
@@ -1481,33 +1574,50 @@
     $('gridBtn').addEventListener('click', toggleGrid);
     $('eaBtn').addEventListener('click', toggleBot);
 
-    // order entry
+    // orders triggers
     $('ticketSymbol').addEventListener('change', updateTicket);
     $('ticketType').addEventListener('change', updateTicket);
-    ['ticketVol', 'ticketSL', 'ticketTP', 'ticketPrice'].forEach((id) => $(id).addEventListener('input', updateTicket));
+    ['ticketVol', 'ticketSL', 'ticketTP', 'ticketPrice'].forEach((id) => {
+      $(id).addEventListener('input', updateTicket);
+    });
     $('tktBuy').addEventListener('click', () => placeTicketOrder('buy'));
     $('tktSell').addEventListener('click', () => placeTicketOrder('sell'));
     $('quickBuy').addEventListener('click', () => placeQuick('buy'));
     $('quickSell').addEventListener('click', () => placeQuick('sell'));
     $('closeAllBtn').addEventListener('click', closeAll);
 
-    // panels
-    document.querySelectorAll('.panel-tab').forEach((b) => b.addEventListener('click', () => switchPanel(b.dataset.panel)));
-    document.querySelectorAll('.logs-tab').forEach((b) => b.addEventListener('click', () => switchLogs(b.dataset.log)));
+    // layout panel swaps
+    document.querySelectorAll('.trade-tab').forEach((b) => {
+      b.addEventListener('click', () => switchPanel(b.dataset.panel));
+    });
+    document.querySelectorAll('.console-tab').forEach((b) => {
+      b.addEventListener('click', () => switchLogs(b.dataset.log));
+    });
 
-    // buttons
+    // credentials actions
     $('oauthBtn').addEventListener('click', startOAuth);
     $('connectBtn').addEventListener('click', () => { closeModal('connModal'); Conn.connectFresh(); });
     $('disconnectBtn').addEventListener('click', () => { Conn.disconnect(); });
     $('cbGoBtn').addEventListener('click', exchangeAuthCodeManual);
     $('eaSaveBtn').addEventListener('click', saveEA);
 
-    // switches
-    ['eaTrail', 'eaBE'].forEach((id) => $(id).addEventListener('click', () => $(id).classList.toggle('on')));
+    // toggle components switches
+    ['eaTrail', 'eaBE'].forEach((id) => {
+      $(id).addEventListener('click', () => $(id).classList.toggle('on'));
+    });
 
-    // close buttons
-    document.querySelectorAll('.close-x').forEach((b) => b.addEventListener('click', () => { const m = b.closest('.overlay'); if (m) m.classList.remove('open'); }));
-    document.querySelectorAll('.overlay').forEach((o) => o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('open'); }));
+    // close controls
+    document.querySelectorAll('.modal-close-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        const m = b.closest('.modal-overlay');
+        if (m) m.classList.remove('open');
+      });
+    });
+    document.querySelectorAll('.modal-overlay').forEach((o) => {
+      o.addEventListener('click', (e) => {
+        if (e.target === o) o.classList.remove('open');
+      });
+    });
   }
 
   function populateEASettings() {
@@ -1523,34 +1633,30 @@
     $('eaOnlyCurrent').checked = S.ea.onlyCurrent;
   }
 
-  // boot
   function boot() {
-    // Surface any JS crash into the Journal so connection failures are never silent.
     window.addEventListener('error', (e) => {
       const fn = (e && e.filename) ? e.filename.replace(/^.*\//, '') + (e && e.lineno ? ':' + e.lineno : '') : '';
-      log('JS error' + (fn ? ' @' + fn : '') + ': ' + (e && e.message ? e.message : (e && e.error ? (e.error.message || 'unknown') : 'unknown')), 'err');
+      log('App Uncaught error' + (fn ? ' @' + fn : '') + ': ' + (e && e.message ? e.message : 'Unknown'), 'err');
     });
     window.addEventListener('unhandledrejection', (e) => {
       const r = e && e.reason;
-      log('JS rejection: ' + (r && r.message ? r.message : (r ? String(r) : 'unknown')), 'err');
+      log('Promise failure rejection: ' + (r && r.message ? r.message : 'Unknown'), 'err');
     });
     const isLocal = /localhost|127\.0\.0\.1|file:/.test(window.location.origin);
     if (isLocal) {
-      log('Running on localhost — /api/* endpoints do not exist here, so OAuth and app auth will fail. Deploy to Vercel.', 'warn');
+      log('Running inside offline environment. Dynamic proxy callbacks disabled.', 'warn');
     }
-    // config endpoint may fail on file:// or offline — fall back silently
     fetch('/api/config').then((r) => r.json()).then((d) => {
       if (!S.clientId) S.clientId = d.clientId || '';
       if (!S.clientSecret) S.clientSecret = d.clientSecret || '';
       init();
-      log(S.clientId ? 'Client credentials loaded (' + S.clientId.slice(0, 10) + '…).' : 'Client credentials empty — OAuth / app auth will fail.', S.clientId ? 'ok' : 'err');
+      log(S.clientId ? 'API specs loaded.' : 'Empty configurations returned.', S.clientId ? 'ok' : 'err');
     }).catch(() => {
       init();
-      log('Could not load /api/config (HTTP error). OAuth and app auth will fail.', 'err');
+      log('Proxy configurations config error. Auth required manual parameters.', 'err');
     });
   }
 
-  // OAuth callback via popup
   window.App = {
     receiveOAuthCode,
     closePosition,
@@ -1561,7 +1667,6 @@
     selectSymbol,
   };
 
-  // detect ?code= in URL (popup or direct redirect)
   (function () {
     const p = new URLSearchParams(window.location.search);
     const code = p.get('code');

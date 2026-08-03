@@ -1,276 +1,415 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>cTrader Terminal</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2322d3ee'/><text x='16' y='22' font-size='16' font-family='Arial' font-weight='800' fill='%2304121f' text-anchor='middle'>cT</text></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=9">
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>cTrader Bot Studio Pro</title>
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2322d3ee'/><text x='16' y='22' font-size='16' font-family='sans-serif' font-weight='900' fill='%23080e1a' text-anchor='middle'>BOT</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css?v=10">
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
-<div class="app">
-  <!-- ================= HEADER ================= -->
-  <header class="header">
-    <div class="brand">
-      <div class="brand-logo">cT</div>
-      <div class="brand-title">cTrader Terminal<small>Open API v2 · Pro</small></div>
+<div class="terminal-app">
+  <!-- ================= TOP HUD HEADER ================= -->
+  <header class="hud-header">
+    <div class="hud-logo">
+      <div class="logo-box">cT</div>
+      <div class="logo-text">
+        <span class="title">cTrader Studio</span>
+        <span class="sub">Open API v2 · Automated Bot</span>
+      </div>
     </div>
 
-    <button class="pill" id="connPill" title="Connection status — click to manage">
-      <span class="dot"></span><span class="lbl">Disconnected</span>
+    <!-- Connection State -->
+    <button class="status-pill disconnected" id="connPill" title="Configure websocket credentials">
+      <span class="status-dot"></span>
+      <span class="status-lbl">Disconnected</span>
     </button>
 
-    <div class="select-wrap">
-      <select id="accSelect" title="Trading account">
-        <option value="">Select account</option>
+    <div class="header-select">
+      <select id="accSelect" title="Select linked cTrader account">
+        <option value="">Select linked account</option>
       </select>
     </div>
 
-    <div class="header-right">
-      <div class="stat-chips">
-        <div class="chip"><div class="k">Balance</div><div class="v" id="hBalance">0.00</div></div>
-        <div class="chip"><div class="k">Equity</div><div class="v" id="hEquity">0.00</div></div>
-        <div class="chip"><div class="k">Margin</div><div class="v" id="hMargin">0.00</div></div>
+    <!-- Live Performance Metrics -->
+    <div class="hud-metrics">
+      <div class="metric-card">
+        <span class="label">Balance</span>
+        <span class="value" id="hBalance">0.00</span>
       </div>
-      <button class="btn ea-btn" id="eaBtn">○ Start EA</button>
-      <button class="icon-btn" id="settingsBtn" title="Connection settings">⚙</button>
+      <div class="metric-card">
+        <span class="label">Equity</span>
+        <span class="value text-accent" id="hEquity">0.00</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">Margin</span>
+        <span class="value" id="hMargin">0.00</span>
+      </div>
+    </div>
+
+    <div class="hud-controls">
+      <button class="ea-trigger-btn" id="eaBtn">○ Launch Bot</button>
+      <button class="settings-trigger-btn" id="settingsBtn" title="Connection Settings">⚙</button>
     </div>
   </header>
 
-  <!-- ================= WORKSPACE ================= -->
-  <div class="workspace">
+  <!-- ================= TERMINAL WORKSPACE ================= -->
+  <div class="terminal-workspace">
 
-    <!-- ---------- Watchlist ---------- -->
-    <aside class="sidebar" id="watchPanel">
-      <div class="panel-head">
-        <span class="panel-title">Market Watch <span id="wlCount" class="count"></span></span>
+    <!-- LEFT SIDEBAR: Market Watch -->
+    <aside class="market-watch-panel" id="watchPanel">
+      <div class="panel-header">
+        <span class="title">Market Watch <span class="count-badge" id="wlCount">0</span></span>
       </div>
-      <div class="search">
-        <span class="mag">⌕</span>
-        <input id="wlSearch" type="text" placeholder="Search symbols…" autocomplete="off">
+      <div class="search-bar">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="wlSearch" placeholder="Search instruments…" autocomplete="off">
       </div>
-      <div class="cat-tabs">
-        <button class="cat-tab active" data-cat="All">All</button>
-        <button class="cat-tab" data-cat="Crypto">Crypto</button>
-        <button class="cat-tab" data-cat="Forex">Forex</button>
-        <button class="cat-tab" data-cat="Metals">Metals</button>
-        <button class="cat-tab" data-cat="Indices">Indices</button>
-        <button class="cat-tab" data-cat="Stocks">Stocks</button>
+      <div class="asset-tabs">
+        <button class="tab-btn active" data-cat="All">All</button>
+        <button class="tab-btn" data-cat="Crypto">Crypto</button>
+        <button class="tab-btn" data-cat="Forex">Forex</button>
+        <button class="tab-btn" data-cat="Metals">Metals</button>
+        <button class="tab-btn" data-cat="Indices">Indices</button>
+        <button class="tab-btn" data-cat="Stocks">Stocks</button>
       </div>
-      <div class="watchlist" id="watchBody">
-        <div class="empty-note">Connect an account to load symbols.</div>
+      <div class="instruments-list" id="watchBody">
+        <div class="empty-state">Link your account to load markets.</div>
       </div>
     </aside>
 
-    <!-- ---------- Center ---------- -->
-    <main class="main">
+    <!-- CENTER CONTAINER: Interactive Chart & Indicators -->
+    <main class="chart-main-container">
       <div class="chart-toolbar">
-        <div class="symbol-badge">
-          <span class="sym" id="chartSymbolName">—</span>
+        <div class="active-instrument">
+          <span class="name" id="chartSymbolName">—</span>
           <span class="price" id="chartSymbolPrice">—</span>
-          <span class="spr" id="chartSymbolSpr"></span>
+          <span class="spread" id="chartSymbolSpr"></span>
         </div>
-        <span class="sep"></span>
-        <button class="tbtn tf-btn active" data-tf="M1">M1</button>
-        <button class="tbtn tf-btn" data-tf="M5">M5</button>
-        <button class="tbtn tf-btn" data-tf="M15">M15</button>
-        <button class="tbtn tf-btn" data-tf="M30">M30</button>
-        <button class="tbtn tf-btn" data-tf="H1">H1</button>
-        <button class="tbtn tf-btn" data-tf="H4">H4</button>
-        <button class="tbtn tf-btn" data-tf="D1">D1</button>
-        <span class="sep"></span>
-        <button class="tbtn active" id="ct_candles">Candles</button>
-        <button class="tbtn" id="ct_bars">Bars</button>
-        <button class="tbtn" id="ct_line">Line</button>
-        <span class="sep"></span>
-        <button class="tbtn active" id="ind_ema9">EMA9</button>
-        <button class="tbtn active" id="ind_ema21">EMA21</button>
-        <button class="tbtn active" id="ind_bb">BB</button>
-        <button class="tbtn active" id="ind_rsi">RSI</button>
-        <button class="tbtn" id="gridBtn">Grid</button>
+        <div class="toolbar-divider"></div>
+        <div class="timeframe-selector">
+          <button class="tf-btn active" data-tf="M1">M1</button>
+          <button class="tf-btn" data-tf="M5">M5</button>
+          <button class="tf-btn" data-tf="M15">M15</button>
+          <button class="tf-btn" data-tf="M30">M30</button>
+          <button class="tf-btn" data-tf="H1">H1</button>
+          <button class="tf-btn" data-tf="H4">H4</button>
+          <button class="tf-btn" data-tf="D1">D1</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="chart-type-selector">
+          <button class="style-btn active" id="ct_candles">Candles</button>
+          <button class="style-btn" id="ct_bars">Bars</button>
+          <button class="style-btn" id="ct_line">Line</button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="indicators-selector">
+          <button class="ind-btn active" id="ind_ema9" title="Exponential Moving Average (9)">EMA9</button>
+          <button class="ind-btn active" id="ind_ema21" title="Exponential Moving Average (21)">EMA21</button>
+          <button class="ind-btn active" id="ind_bb" title="Bollinger Bands (20, 2)">BB</button>
+          <button class="ind-btn active" id="ind_rsi" title="Relative Strength Index (14)">RSI</button>
+          <button class="ind-btn" id="gridBtn">Grid</button>
+        </div>
       </div>
 
-      <div class="chart-area">
-        <div class="oct">
-          <button class="oct-btn sell" id="quickSell"><span class="pl">Sell</span><span class="px" id="octBid">—</span></button>
-          <input class="oct-vol" id="quickVol" value="0.10" step="0.01" min="0" title="Volume (lots)">
-          <button class="oct-btn buy" id="quickBuy"><span class="pl">Buy</span><span class="px" id="octAsk">—</span></button>
+      <!-- Live Interactive Candlestick Area -->
+      <div class="chart-viewport">
+        <!-- Quick Trade Overlay -->
+        <div class="one-click-trading-overlay">
+          <button class="quick-trade-btn sell" id="quickSell">
+            <span class="side-lbl">SELL</span>
+            <span class="price-val" id="octBid">—</span>
+          </button>
+          <input type="number" class="quick-vol-input" id="quickVol" value="0.10" step="0.01" min="0.01" title="Lots">
+          <button class="quick-trade-btn buy" id="quickBuy">
+            <span class="side-lbl">BUY</span>
+            <span class="price-val" id="octAsk">—</span>
+          </button>
         </div>
-        <div id="chartContainer"></div>
-        <div id="rsiContainer"></div>
+        <!-- LightWeight Charts Render Canvas -->
+        <div class="canvas-wrapper" id="chartContainer"></div>
+        <div class="rsi-wrapper" id="rsiContainer"></div>
       </div>
 
-      <div class="logs">
-        <div class="logs-head">
-          <button class="logs-tab active" data-log="journal">Journal</button>
-          <button class="logs-tab" data-log="ea">Experts / EA</button>
+      <!-- Dynamic Console Log Tabs -->
+      <div class="console-log-panel">
+        <div class="console-tabs">
+          <button class="console-tab active" data-log="journal">System Journal</button>
+          <button class="console-tab" data-log="ea">Auto Bot Logs</button>
         </div>
-        <div class="logs-body" id="logJournalWrap"><div id="logJournal"></div></div>
-        <div class="logs-body" id="logEAWrap" style="display:none"><div id="logEA"></div></div>
+        <div class="console-body active" id="logJournalWrap">
+          <div class="console-lines" id="logJournal"></div>
+        </div>
+        <div class="console-body" id="logEAWrap">
+          <div class="console-lines" id="logEA"></div>
+        </div>
       </div>
     </main>
 
-    <!-- ---------- Right: trade panel ---------- -->
-    <aside class="trade-panel">
-      <div class="trade-head">
-        <div class="tabs">
-          <button class="tab panel-tab active" data-panel="positions">Positions</button>
-          <button class="tab panel-tab" data-panel="pending">Pending</button>
-          <button class="tab panel-tab" data-panel="history">History</button>
+    <!-- RIGHT SIDEBAR: Position Tracker & Order Entry -->
+    <aside class="trade-execution-panel">
+      <div class="panel-header">
+        <div class="trade-tabs">
+          <button class="trade-tab active" data-panel="positions">Positions</button>
+          <button class="trade-tab" data-panel="pending">Pending</button>
+          <button class="trade-tab" data-panel="history">History</button>
         </div>
-        <button class="icon-btn" style="margin-left:auto" title="EA settings" onclick="App.openEA()">🤖</button>
+        <button class="bot-settings-btn" id="botConfigIconBtn" title="Launch Automated Bot Strategy Configuration" onclick="App.openEA()">🤖</button>
       </div>
 
-      <div class="order-entry">
-        <div class="f-row">
-          <div class="f-cell"><label>Symbol</label><select id="ticketSymbol"></select></div>
-          <div class="f-cell"><label>Type</label>
+      <!-- Ticket Order Form -->
+      <div class="order-form-container">
+        <div class="form-grid">
+          <div class="field-box">
+            <label>Instrument</label>
+            <select id="ticketSymbol"></select>
+          </div>
+          <div class="field-box">
+            <label>Order Type</label>
             <select id="ticketType">
-              <option value="MARKET">Market</option>
-              <option value="LIMIT">Limit</option>
-              <option value="STOP">Stop</option>
+              <option value="MARKET">Market Execution</option>
+              <option value="LIMIT">Limit Order</option>
+              <option value="STOP">Stop Order</option>
             </select>
           </div>
         </div>
-        <div class="f-row">
-          <div class="f-cell"><label>Volume (lots)</label><input type="number" id="ticketVol" value="0.10" step="0.01" min="0"></div>
-          <div class="f-cell"><label>Price (limit/stop)</label><input type="number" id="ticketPrice" placeholder="auto"></div>
-        </div>
-        <div class="f-row">
-          <div class="f-cell"><label>SL (pips)</label><input type="number" id="ticketSL" value="30" step="1" min="0"></div>
-          <div class="f-cell"><label>TP (pips)</label><input type="number" id="ticketTP" value="60" step="1" min="0"></div>
-        </div>
-        <div class="order-actions">
-          <button class="big-btn buy" id="tktBuy"><span class="s">Buy Market</span></button>
-          <button class="big-btn sell" id="tktSell"><span class="s">Sell Market</span></button>
-        </div>
-      </div>
-
-      <div class="stats-grid">
-        <div class="stat"><div class="k">Balance</div><div class="v" id="stBalance">0.00</div></div>
-        <div class="stat"><div class="k">Equity</div><div class="v" id="stEquity">0.00</div></div>
-        <div class="stat"><div class="k">Margin</div><div class="v" id="stMargin">0.00</div></div>
-        <div class="stat"><div class="k">Margin Lvl</div><div class="v" id="stML">—</div></div>
-        <div class="stat"><div class="k">Float P&L</div><div class="v" id="stFloat">0.00</div></div>
-        <div class="stat"><div class="k">Currency</div><div class="v" id="stCurrency">—</div></div>
-      </div>
-
-      <div class="table-scroll">
-        <div id="panel_positions"><div class="placeholder" id="positionsBody">No open positions</div></div>
-        <div id="panel_pending" style="display:none"><div class="placeholder" id="pendingBody">No pending orders</div></div>
-        <div id="panel_history" style="display:none"><div class="placeholder" id="historyBody">No trade history</div></div>
-      </div>
-
-      <button class="btn block" id="closeAllBtn" style="margin:10px;width:calc(100% - 20px)">Close All Positions</button>
-    </aside>
-  </div>
-</div>
-
-<!-- ================= CONNECTION MODAL ================= -->
-<div class="overlay" id="connModal">
-  <div class="modal">
-    <div class="modal-head"><h3>Connection Settings</h3><button class="close-x">✕</button></div>
-    <div class="modal-body">
-      <div class="conn-banner mid" id="connBanner">Not connected</div>
-      <div class="grp">
-        <label>Environment</label>
-        <select id="connEnv"><option value="demo">Demo Server</option><option value="live">Live Server</option></select>
-      </div>
-      <div class="grp">
-        <label>Client ID</label>
-        <input type="text" id="clientIdInput" placeholder="Your cTrader Client ID">
-      </div>
-      <div class="grp">
-        <label>Client Secret</label>
-        <input type="password" id="clientSecretInput" placeholder="Your cTrader Client Secret">
-      </div>
-      <div class="grp">
-        <label>Redirect URI (OAuth)</label>
-        <input type="text" id="connRedirect" placeholder="https://your-app.vercel.app">
-      </div>
-      <div class="grp">
-        <label>Access Token</label>
-        <input type="text" id="tokInput" placeholder="Auto-filled via OAuth, or paste manually">
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" id="oauthBtn">🔑 Authorize with cTrader</button>
-        <button class="btn" id="connectBtn">Connect</button>
-      </div>
-      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-        <div class="grp">
-          <label>Manual callback / ?code= …</label>
-          <div class="f-row">
-            <input type="text" id="cbInput" placeholder="Paste callback URL or code" style="flex:1">
-            <button class="btn" id="cbGoBtn">Go</button>
+        <div class="form-grid">
+          <div class="field-box">
+            <label>Volume (Lots)</label>
+            <input type="number" id="ticketVol" value="0.10" step="0.01" min="0.01">
+          </div>
+          <div class="field-box">
+            <label>Target Price</label>
+            <input type="number" id="ticketPrice" placeholder="Market Price" step="0.00001">
           </div>
         </div>
-        <button class="btn block" id="disconnectBtn" style="margin-top:8px">Disconnect</button>
+        <div class="form-grid">
+          <div class="field-box">
+            <label>Stop Loss (pips)</label>
+            <input type="number" id="ticketSL" value="30" step="1" min="0">
+          </div>
+          <div class="field-box">
+            <label>Take Profit (pips)</label>
+            <input type="number" id="ticketTP" value="60" step="1" min="0">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="big-action-btn buy" id="tktBuy"><span class="btn-primary-text">Buy Market</span></button>
+          <button class="big-action-btn sell" id="tktSell"><span class="btn-primary-text">Sell Market</span></button>
+        </div>
       </div>
-    </div>
+
+      <!-- Dynamic Portfolio Overview -->
+      <div class="portfolio-grid">
+        <div class="portfolio-card">
+          <span class="lbl">Balance</span>
+          <span class="val" id="stBalance">0.00</span>
+        </div>
+        <div class="portfolio-card">
+          <span class="lbl">Equity</span>
+          <span class="val" id="stEquity">0.00</span>
+        </div>
+        <div class="portfolio-card">
+          <span class="lbl">Margin Level</span>
+          <span class="val" id="stML">—</span>
+        </div>
+        <div class="portfolio-card">
+          <span class="lbl">Floating P&L</span>
+          <span class="val" id="stFloat">0.00</span>
+        </div>
+      </div>
+
+      <!-- Scrollable Active Orders & History Listings -->
+      <div class="terminal-table-viewport">
+        <div class="table-container active" id="panel_positions">
+          <div class="table-empty-row" id="positionsBody">No active positions</div>
+        </div>
+        <div class="table-container" id="panel_pending">
+          <div class="table-empty-row" id="pendingBody">No pending orders</div>
+        </div>
+        <div class="table-container" id="panel_history">
+          <div class="table-empty-row" id="historyBody">No closed history</div>
+        </div>
+      </div>
+
+      <button class="emergency-close-btn" id="closeAllBtn">Close All Active Positions</button>
+    </aside>
+
   </div>
 </div>
 
-<!-- ================= EA SETTINGS MODAL ================= -->
-<div class="overlay" id="eaModal">
-  <div class="modal">
-    <div class="modal-head"><h3>Expert Advisor — Risk & Strategy</h3><button class="close-x">✕</button></div>
-    <div class="modal-body">
-      <div class="grp">
-        <label>Volume Management</label>
-        <select id="eaMode">
-          <option value="risk">Adaptive Risk (% of balance)</option>
-          <option value="fixed">Fixed Lot Size</option>
+<!-- ================= MODAL: CONNECTION SETTINGS ================= -->
+<div class="modal-overlay" id="connModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h3>Websocket API Credentials</h3>
+      <button class="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-content">
+      <div class="connection-state-banner disconnected" id="connBanner">Not connected</div>
+      <div class="form-group">
+        <label>Server Environment</label>
+        <select id="connEnv">
+          <option value="demo">Demo Environment</option>
+          <option value="live">Live Environment</option>
         </select>
       </div>
-      <div class="grp-row">
-        <div class="grp"><label>Risk % per trade</label><input type="number" id="eaRisk" step="0.1" min="0.1" value="1.0"></div>
-        <div class="grp"><label>Fixed lots</label><input type="number" id="eaFixedLot" step="0.01" min="0.01" value="0.10"></div>
+      <div class="form-group">
+        <label>Client ID</label>
+        <input type="text" id="clientIdInput" placeholder="Enter your cTrader Open API Client ID">
       </div>
-      <div class="grp-row">
-        <div class="grp"><label>Max positions</label><input type="number" id="eaMaxPos" min="1" value="3"></div>
-        <div class="grp"><label>Max spread (pips)</label><input type="number" id="eaMaxSpread" step="0.5" min="0" value="5"></div>
+      <div class="form-group">
+        <label>Client Secret</label>
+        <input type="password" id="clientSecretInput" placeholder="Enter your cTrader Open API Client Secret">
       </div>
-      <div class="grp-row">
-        <div class="grp"><label>ATR × SL multiplier</label><input type="number" id="eaAtrMult" step="0.1" min="1" value="2.5"></div>
-        <div class="grp"><label>Risk : Reward</label><input type="number" id="eaRR" step="0.5" min="1" value="3"></div>
+      <div class="form-group">
+        <label>OAuth Redirect URI</label>
+        <input type="text" id="connRedirect" placeholder="https://your-deployment.vercel.app">
       </div>
-      <div class="switch-row">
-        <div><div class="l">Trailing Stop</div><div class="d">Locks profit once the trigger pips are reached.</div></div>
-        <div class="switch" id="eaTrail"></div>
+      <div class="form-group">
+        <label>Access Token</label>
+        <input type="text" id="tokInput" placeholder="Authorize below or paste manually">
       </div>
-      <div class="grp-row">
-        <div class="grp"><label>Trail trigger (pips)</label><input type="number" id="eaTrailTrigger" value="40"></div>
-        <div class="grp"><label>Trail distance (pips)</label><input type="number" id="eaTrailDist" value="20"></div>
+
+      <div class="button-actions-row">
+        <button class="action-btn primary" id="oauthBtn">🔑 Authorize with cTrader</button>
+        <button class="action-btn secondary" id="connectBtn">Connect Socket</button>
       </div>
-      <div class="switch-row">
-        <div><div class="l">Break Even</div><div class="d">Moves SL to entry + lock once the trigger pips are reached.</div></div>
-        <div class="switch" id="eaBE"></div>
+
+      <div class="modal-divider"></div>
+
+      <div class="form-group">
+        <label>Manual Authentication Callback</label>
+        <div class="input-inline-row">
+          <input type="text" id="cbInput" placeholder="Paste full callback redirect URL or Code">
+          <button class="action-btn inline" id="cbGoBtn">Submit</button>
+        </div>
       </div>
-      <div class="grp-row">
-        <div class="grp"><label>BE trigger (pips)</label><input type="number" id="eaBeTrigger" value="30"></div>
-        <div class="grp"><label>BE lock (pips)</label><input type="number" id="eaBeLock" value="2"></div>
-      </div>
-      <div class="grp-row">
-        <div class="grp"><label>Daily loss limit ($, 0 = off)</label><input type="number" id="eaMaxLoss" value="0"></div>
-        <div class="grp"><label>Signal cooldown (sec)</label><input type="number" id="eaCooldown" min="5" value="60"></div>
-      </div>
-      <div class="switch-row">
-        <div><div class="l">Trade only the selected symbol</div><div class="d">When off, the EA scans every subscribed symbol.</div></div>
-        <input type="checkbox" id="eaOnlyCurrent" style="transform:scale(1.3)">
-      </div>
-      <div style="margin-top:16px"><button class="btn primary block" id="eaSaveBtn">Save EA Settings</button></div>
+
+      <button class="action-btn alert-block" id="disconnectBtn">Disconnect Session</button>
     </div>
   </div>
 </div>
 
-<div class="toasts" id="toasts"></div>
+<!-- ================= MODAL: AUTOMATED BOT / EA CONFIGURATION ================= -->
+<div class="modal-overlay" id="eaModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h3>Automated Bot Strategy Preferences</h3>
+      <button class="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-content">
+      <div class="form-group">
+        <label>Lot Sizing Strategy</label>
+        <select id="eaMode">
+          <option value="risk">Dynamic Risk Management (% of Balance)</option>
+          <option value="fixed">Fixed Lot Sizing</option>
+        </select>
+      </div>
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>Risk % Per Trade</label>
+          <input type="number" id="eaRisk" step="0.1" min="0.1" value="1.0">
+        </div>
+        <div class="form-group">
+          <label>Fixed Lot Size</label>
+          <input type="number" id="eaFixedLot" step="0.01" min="0.01" value="0.10">
+        </div>
+      </div>
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>Max Parallel Positions</label>
+          <input type="number" id="eaMaxPos" min="1" value="3">
+        </div>
+        <div class="form-group">
+          <label>Max Allowed Spread (Pips)</label>
+          <input type="number" id="eaMaxSpread" step="0.5" min="0" value="5">
+        </div>
+      </div>
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>ATR stop loss multiplier</label>
+          <input type="number" id="eaAtrMult" step="0.1" min="1" value="2.5">
+        </div>
+        <div class="form-group">
+          <label>Risk-to-Reward Ratio</label>
+          <input type="number" id="eaRR" step="0.5" min="1" value="3">
+        </div>
+      </div>
 
-<script src="/js/proto.js?v=9"></script>
-<script src="/js/conn.js?v=9"></script>
-<script src="/js/app.js?v=9"></script>
+      <div class="toggle-switch-wrapper">
+        <div class="toggle-labels">
+          <span class="title">Trailing Stop Loss</span>
+          <span class="description">Trailing will trail the stop loss with specified distance.</span>
+        </div>
+        <div class="toggle-control" id="eaTrail"></div>
+      </div>
+
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>Trail Trigger Pips</label>
+          <input type="number" id="eaTrailTrigger" value="40">
+        </div>
+        <div class="form-group">
+          <label>Trail Distance Pips</label>
+          <input type="number" id="eaTrailDist" value="20">
+        </div>
+      </div>
+
+      <div class="toggle-switch-wrapper">
+        <div class="toggle-labels">
+          <span class="title">Break Even Activation</span>
+          <span class="description">Move stop loss to entry + locking once trigger target is met.</span>
+        </div>
+        <div class="toggle-control" id="eaBE"></div>
+      </div>
+
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>BE Trigger Pips</label>
+          <input type="number" id="eaBeTrigger" value="30">
+        </div>
+        <div class="form-group">
+          <label>BE Lock Pips</label>
+          <input type="number" id="eaBeLock" value="2">
+        </div>
+      </div>
+
+      <div class="form-row-split">
+        <div class="form-group">
+          <label>Daily Loss Limit (Deposit Currency, 0 = off)</label>
+          <input type="number" id="eaMaxLoss" value="0">
+        </div>
+        <div class="form-group">
+          <label>Signal Cooldown (seconds)</label>
+          <input type="number" id="eaCooldown" min="5" value="60">
+        </div>
+      </div>
+
+      <div class="toggle-checkbox-row">
+        <div class="label-info">
+          <span class="title">Filter Bot Trading on Selected Market Only</span>
+          <span class="description">Disable scanning other subscribed watchlist markets.</span>
+        </div>
+        <input type="checkbox" id="eaOnlyCurrent" class="styled-checkbox">
+      </div>
+
+      <button class="action-btn primary block-level" id="eaSaveBtn">Apply Automated Bot Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SYSTEM NOTIFICATIONS OVERLAY ================= -->
+<div class="notification-toasts-viewport" id="toasts"></div>
+
+<!-- Core application modules -->
+<script src="/js/proto.js?v=10"></script>
+<script src="/js/conn.js?v=10"></script>
+<script src="/js/app.js?v=10"></script>
 </body>
 </html>
