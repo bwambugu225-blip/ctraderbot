@@ -70,6 +70,7 @@
   // ---------------- logging ----------------
   function log(msg, cls) {
     cls = cls || '';
+    console.log('[FullBot]', cls, msg);
     const box = $('logJournal');
     const t = new Date().toTimeString().slice(0, 8);
     const div = document.createElement('div');
@@ -80,6 +81,8 @@
     box.scrollTop = box.scrollHeight;
   }
   function elog(msg, cls) {
+    cls = cls || '';
+    console.log('[FullBot EA]', cls, msg);
     const box = $('logEA');
     const t = new Date().toTimeString().slice(0, 8);
     const div = document.createElement('div');

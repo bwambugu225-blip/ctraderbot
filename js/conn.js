@@ -312,7 +312,7 @@ window.Conn = (function () {
     // ---------------- utils ----------------
     nextId() { return 'cm_' + Date.now() + '_' + Math.floor(Math.random() * 1e6); },
     status(text, cls) { if (this.onStatus) this.onStatus(text, cls); },
-    log(msg, cls) { if (this.onLog) this.onLog(msg, cls); },
+    log(msg, cls) { console.log('[Conn][' + (cls||'') + ']', msg); if (this.onLog) this.onLog(msg, cls); },
   };
 
   return c;
