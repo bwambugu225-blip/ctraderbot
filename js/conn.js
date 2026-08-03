@@ -15,7 +15,9 @@ window.Conn = (function () {
     ws: null,
     state: 'idle', // idle | connecting | connected
     intentional: false,
-    phase: '',
+    giveUp: false,
+    _pending: null,
+    _requestId: 0,
     reconnectTimer: null,
     reconnectScheduled: false,
     reconnectAttempts: 0,
@@ -39,93 +41,131 @@ window.Conn = (function () {
 
     init(cfg) {
       this.config = cfg;
+      this._pending = new Map();
       return this;
     },
 
     get connected() { return this.state === 'connected'; },
     get isConnecting() { return this.state === 'connecting'; },
 
-    connect() {
-      if (this.state === 'connecting' || this.state === 'connected') {
-        this.log('Connect called but already ' + this.state + ' — use connectFresh() to restart.', 'warn');
-        return;
-      }
-      const creds = this.creds;
-      if (!creds.clientId || !creds.clientSecret) {
-        this.log('Missing Client ID or Client Secret. Open Connection Settings to enter them.', 'err');
-        this.status('Credentials required', 'off');
-        return;
-      }
-      this.intentional = false;
-      this.giveUp = false;
-      this._everOpened = false;
-      this.reconnectScheduled = false;
-      this.state = 'connecting';
-      this.connectStartedAt = Date.now();
-      this.tokenErrorShown = false;
-      this.status('Connecting…', 'mid');
-      this.log('Opening connection to ' + this.host() + '…', 'info');
+     connect() {
+       if (this.state === 'connecting' || this.state === 'connected') {
+         this.log('Connect called but already ' + this.state + ' — use connectFresh() to restart.', 'warn');
+         return;
+       }
+       const creds = this.creds;
+       if (!creds.clientId || !creds.clientSecret) {
+         this.log('Missing Client ID or Client Secret. Open Connection Settings to enter them.', 'err');
+         this.status('Credentials required', 'off');
+         return;
+       }
+       this.intentional = false;
+       this.giveUp = false;
+       this._everOpened = false;
+       this.reconnectScheduled = false;
+       this.state = 'connecting';
+       this.connectStartedAt = Date.now();
+       this.tokenErrorShown = false;
+       this.status('Connecting…', 'mid');
+       this.log('Opening connection to ' + this.host() + '…', 'info');
 
-      try { if (this.ws) this.ws.close(); } catch (e) { /* noop */ }
-      const ws = new WebSocket('wss://' + this.host() + ':5036');
-      this.ws = ws;
+       try { if (this.ws) this.ws.close(); } catch (e) { /* noop */ }
+       const ws = new WebSocket('wss://' + this.host() + ':5036');
+       this.ws = ws;
 
-      ws.onopen = () => {
-        this._everOpened = true;
-        this.log('Socket open — authenticating app…', 'info');
-        this.send({ clientMsgId: this.nextId(), payloadType: P.APPLICATION_AUTH_REQ, payload: { clientId: creds.clientId, clientSecret: creds.clientSecret } });
-        this.phase = 'app_auth';
-      };
+       ws.onopen = async () => {
+         this._everOpened = true;
+         this.log('Socket open — authenticating app…', 'info');
+         try {
+           await this._request(P.APPLICATION_AUTH_REQ, { clientId: creds.clientId, clientSecret: creds.clientSecret });
+           this.log('App authenticated.', 'ok');
+           if (creds.accessToken && creds.accountId) {
+             await this.accountAuth(creds.accountId, creds.accessToken);
+           } else if (creds.accessToken) {
+             await this.requestAccounts();
+           } else {
+             this.state = 'idle';
+             this.teardownTimers();
+             this.status('Token required', 'off');
+             this.log('No access token — click "Authorize with cTrader" first.', 'warn');
+           }
+         } catch (err) {
+           this.log('Auth failed: ' + err.message, 'err');
+           this.state = 'idle';
+         }
+       };
 
-      ws.onmessage = (e) => {
-        this.lastMsgAt = Date.now();
-        if (typeof e.data === 'string') this.handleRaw(e.data);
-        else if (e.data instanceof Blob) e.data.text().then((t) => this.handleRaw(t)).catch(() => {});
-      };
+       ws.onmessage = (e) => {
+         this.lastMsgAt = Date.now();
+         if (typeof e.data === 'string') this.handleRaw(e.data);
+         else if (e.data instanceof Blob) e.data.text().then((t) => this.handleRaw(t)).catch(() => {});
+       };
 
-      ws.onerror = () => { this.log('WebSocket transport error (cannot reach ' + this.host() + ':5036).', 'err'); };
+       ws.onerror = () => { this.log('WebSocket transport error (cannot reach ' + this.host() + ':5036).', 'err'); };
 
-      ws.onclose = (ev) => {
-        const wasConnected = this.state === 'connected';
-        this.teardownTimers();
-        this.state = 'idle';
-        this.ws = null;
-        this.phase = '';
-        if (this.intentional) {
-          this.status('Disconnected', 'off');
-          this.log('Disconnected (manual).', 'warn');
-          if (this.onDisconnected) this.onDisconnected('manual');
-          return;
-        }
-        if (!this._everOpened) {
-          this.log('Could not open the connection — check your network / firewall, then press Connect.', 'err');
-          this.status('Connection failed', 'off');
-          return;
-        }
-        this.log('Connection closed (' + ev.code + '). Reconnecting…', 'warn');
-        this.status('Reconnecting…', 'mid');
-        if (wasConnected && this.onDisconnected) this.onDisconnected('dropped');
-        this.scheduleReconnect();
-      };
+       ws.onclose = (ev) => {
+         const wasConnected = this.state === 'connected';
+         this.teardownTimers();
+         this.state = 'idle';
+         this.ws = null;
+         if (this.intentional) {
+           this.status('Disconnected', 'off');
+           this.log('Disconnected (manual).', 'warn');
+           if (this.onDisconnected) this.onDisconnected('manual');
+           return;
+         }
+         if (!this._everOpened) {
+           this.log('Could not open the connection — check your network / firewall, then press Connect.', 'err');
+           this.status('Connection failed', 'off');
+           return;
+         }
+         this.log('Connection closed (' + ev.code + '). Reconnecting…', 'warn');
+         this.status('Reconnecting…', 'mid');
+         if (wasConnected && this.onDisconnected) this.onDisconnected('dropped');
+         this.scheduleReconnect();
+       };
 
-      this.startWatchdog();
-    },
+       this.startWatchdog();
+     },
 
     host() {
       return this.creds.env === 'live' ? 'live.ctraderapi.com' : 'demo.ctraderapi.com';
     },
 
-    disconnect() {
-      this.intentional = true;
-      this.reconnectScheduled = false;
-      this.teardownTimers();
-      if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-      if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
-      this.state = 'idle';
-      this.phase = '';
-      this.status('Disconnected', 'off');
-      this.log('Disconnected.', 'warn');
+    // ---------------- request/response (Promise-based, like ctrader-js) ----------------
+    _request(payloadType, payload, timeoutMs) {
+      var self = this;
+      timeoutMs = timeoutMs || 10000;
+      return new Promise(function(resolve, reject) {
+        var msgId = 'req_' + (++self._requestId) + '_' + Date.now();
+        var timer = setTimeout(function() {
+          self._pending.delete(msgId);
+          reject(new Error('Request timeout for payloadType=' + payloadType));
+        }, timeoutMs);
+        self._pending.set(msgId, { resolve: resolve, reject: reject, timer: timer });
+        self.send({ clientMsgId: msgId, payloadType: payloadType, payload: payload || {} });
+      });
     },
+
+    _clearPending() {
+      for (var entry of this._pending.values()) {
+        clearTimeout(entry.timer);
+        entry.reject(new Error('Connection closed'));
+      }
+      this._pending.clear();
+    },
+
+     disconnect() {
+       this.intentional = true;
+       this.reconnectScheduled = false;
+       this.teardownTimers();
+       this._clearPending();
+       if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+       if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
+       this.state = 'idle';
+       this.status('Disconnected', 'off');
+       this.log('Disconnected.', 'warn');
+     },
 
     send(msg) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
@@ -162,93 +202,81 @@ window.Conn = (function () {
       const type = msg.payloadType;
       const payload = msg.payload || {};
 
-      switch (type) {
-        case P.APPLICATION_AUTH_RES: {
-          if (payload.errorCode) { this.authFailed(payload); return; }
-          this.log('App authenticated.', 'ok');
-          this.phase = 'app_authed';
-          const creds = this.creds;
-          if (creds.accessToken && creds.accountId) {
-            this.accountAuth(creds.accountId, creds.accessToken);
-          } else if (creds.accessToken) {
-            this.requestAccounts();
-          } else {
-            this.state = 'idle';
-            this.teardownTimers();
-            this.status('Token required', 'off');
-            this.log('No access token — click "Authorize with cTrader" first.', 'warn');
-          }
-          break;
+      // Resolve a pending request if clientMsgId matches
+      if (msg.clientMsgId && this._pending.has(msg.clientMsgId)) {
+        const entry = this._pending.get(msg.clientMsgId);
+        clearTimeout(entry.timer);
+        this._pending.delete(msg.clientMsgId);
+        if (payload.errorCode) {
+          entry.reject(new Error(payload.description || 'API error ' + payload.errorCode));
+        } else {
+          entry.resolve({ payloadType: type, payload: payload, raw: msg });
         }
-        case P.GET_ACCOUNTS_BY_ACCESS_TOKEN_RES: {
-          const accounts = payload.ctidTraderAccount || [];
-          this.log(accounts.length + ' account(s) found for token.', 'ok');
-          this.phase = 'accounts_loaded';
-          if (this.onAccounts) this.onAccounts(accounts);
-          break;
-        }
-        case P.ACCOUNT_AUTH_RES: {
-          if (payload.errorCode) { this.authFailed(payload); return; }
-          this.state = 'connected';
-          this.phase = 'authed';
-          this.reconnectAttempts = 0;
-          this.status('Connected', 'on');
-          this.log('Account authenticated — session live.', 'ok');
-          this.startPing();
-          if (this.onConnected) this.onConnected();
-          break;
-        }
-        case P.CLIENT_DISCONNECT_EVENT:
-          this.log('Server closed the session (' + (payload.reason || '') + ').', 'warn');
-          this.status('Reconnecting…', 'mid');
-          this.scheduleReconnect();
-          if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
-          this.state = 'idle';
-          break;
-        case P.ERROR_RES: {
-          const code = payload.errorCode || '';
-          if (TOKEN_ERRORS.some((t) => code.toUpperCase().indexOf(t) !== -1)) {
-            this.log('Access token invalid/expired (' + code + ').', 'err');
-            if (!this.tokenErrorShown) { this.tokenErrorShown = true; if (this.onTokenError) this.onTokenError(); }
-          } else if (code.toUpperCase() === 'AUTHENTICATION_FAILED' || code.toUpperCase() === 'CH_CLIENT_AUTH_FAILURE' || code.toUpperCase() === 'CH_OA_CLIENT_NOT_FOUND') {
-            this.authFailed(payload);
-          } else {
-            this.log('API error [' + code + ']: ' + (payload.description || ''), 'err');
-          }
-          break;
-        }
-        case P.ORDER_ERROR_EVENT:
-          this.log('Order rejected [' + (payload.errorCode || '') + ']: ' + (payload.description || ''), 'err');
-          break;
-        default:
-          if (this.onMessage) this.onMessage(type, payload, msg);
+        return;
       }
+
+       switch (type) {
+         case P.CLIENT_DISCONNECT_EVENT:
+           this.log('Server closed the session (' + (payload.reason || '') + ').', 'warn');
+           this.status('Reconnecting…', 'mid');
+           this.scheduleReconnect();
+           if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
+           this.state = 'idle';
+           break;
+         case P.ERROR_RES: {
+           const code = payload.errorCode || '';
+           if (TOKEN_ERRORS.some((t) => code.toUpperCase().indexOf(t) !== -1)) {
+             this.log('Access token invalid/expired (' + code + ').', 'err');
+             if (!this.tokenErrorShown) { this.tokenErrorShown = true; if (this.onTokenError) this.onTokenError(); }
+           } else if (code.toUpperCase() === 'AUTHENTICATION_FAILED' || code.toUpperCase() === 'CH_CLIENT_AUTH_FAILURE' || code.toUpperCase() === 'CH_OA_CLIENT_NOT_FOUND') {
+             this.authFailed(payload);
+           } else {
+             this.log('API error [' + code + ']: ' + (payload.description || ''), 'err');
+           }
+           break;
+         }
+         case P.ORDER_ERROR_EVENT:
+           this.log('Order rejected [' + (payload.errorCode || '') + ']: ' + (payload.description || ''), 'err');
+           break;
+         default:
+           if (this.onMessage) this.onMessage(type, payload, msg);
+       }
     },
 
-    authFailed(payload) {
-      this.log('Authentication failed [' + payload.errorCode + ']: ' + (payload.description || ''), 'err');
-      this.status('Auth failed', 'off');
-      this.teardownTimers();
-      this.log('Check your client ID / secret in Connection Settings, then reconnect.', 'warn');
-      this.intentional = true; // don't hot-loop on bad credentials
-      this.state = 'idle';
-      if (this.onDisconnected) this.onDisconnected('auth_failed');
-    },
+     authFailed(payload) {
+       this.log('Authentication failed [' + payload.errorCode + ']: ' + (payload.description || ''), 'err');
+       this.status('Auth failed', 'off');
+       this.teardownTimers();
+       this._clearPending();
+       this.log('Check your client ID / secret in Connection Settings, then reconnect.', 'warn');
+       this.intentional = true;
+       this.state = 'idle';
+       if (this.onDisconnected) this.onDisconnected('auth_failed');
+     },
 
-    accountAuth(accountId, token) {
-      const id = parseInt(accountId, 10);
-      if (!id || isNaN(id)) { this.log('Invalid account ID.', 'err'); return; }
-      this.log('Authenticating account #' + id + '…', 'info');
-      this.phase = 'account_auth';
-      this.send({ clientMsgId: this.nextId(), payloadType: P.ACCOUNT_AUTH_REQ, payload: { ctidTraderAccountId: id, accessToken: token } });
-    },
+     async accountAuth(accountId, token) {
+       const id = parseInt(accountId, 10);
+       if (!id || isNaN(id)) { this.log('Invalid account ID.', 'err'); return; }
+       this.log('Authenticating account #' + id + '…', 'info');
+       await this._request(P.ACCOUNT_AUTH_REQ, { ctidTraderAccountId: id, accessToken: token });
+       this.state = 'connected';
+       this.reconnectAttempts = 0;
+       this.status('Connected', 'on');
+       this.log('Account authenticated — session live.', 'ok');
+       this.startPing();
+       if (this.onConnected) this.onConnected();
+     },
 
-    requestAccounts() {
-      const token = this.creds.accessToken;
-      if (!token) return;
-      this.log('Listing accounts for token…', 'info');
-      this.send({ clientMsgId: this.nextId(), payloadType: P.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ, payload: { accessToken: token } });
-    },
+     async requestAccounts() {
+       const token = this.creds.accessToken;
+       if (!token) return;
+       this.log('Listing accounts for token…', 'info');
+       const res = await this._request(P.GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ, { accessToken: token });
+       const accounts = (res.payload && res.payload.ctidTraderAccount) || [];
+       this.log(accounts.length + ' account(s) found for token.', 'ok');
+       if (this.onAccounts) this.onAccounts(accounts);
+       return accounts;
+     },
 
     // ---------------- keep-alive & watchdog ----------------
     startPing() {
@@ -276,11 +304,12 @@ window.Conn = (function () {
       }, 5000);
     },
 
-    forceReconnect() {
-      this.state = 'idle';
-      if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
-      this.scheduleReconnect();
-    },
+     forceReconnect() {
+       this.state = 'idle';
+       this._clearPending();
+       if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { /* noop */ } this.ws = null; }
+       this.scheduleReconnect();
+     },
 
     teardownTimers() {
       if (this.watchdogTimer) { clearInterval(this.watchdogTimer); this.watchdogTimer = null; }

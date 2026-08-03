@@ -174,8 +174,8 @@
       const envSel = $('connEnv');
       if (envSel) envSel.value = S.env;
       // Finish auth with the picked account so the session goes live
-      log('onAccounts auth-gate: connected=' + Conn.connected + ' phase=' + Conn.phase + ' accountId=' + S.accountId, 'info');
-      if (!Conn.connected && (Conn.phase === 'app_authed' || Conn.phase === 'accounts_loaded')) {
+      log('onAccounts auth-gate: connected=' + Conn.connected + ' accountId=' + S.accountId, 'info');
+      if (!Conn.connected) {
         if (pick && (!!pick.isLive) !== socketIsLive) {
           log('Account is ' + (pick.isLive ? 'LIVE' : 'demo') + ' but socket is ' + (socketIsLive ? 'live' : 'demo') + ' — reconnecting to the right host…', 'info');
           setTimeout(function () { Conn.connectFresh(); }, 400);
