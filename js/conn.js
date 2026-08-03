@@ -53,6 +53,8 @@ window.Conn = (function () {
         return;
       }
       this.intentional = false;
+      this.giveUp = false;
+      this._everOpened = false;
       this.reconnectScheduled = false;
       this.state = 'connecting';
       this.connectStartedAt = Date.now();
@@ -65,6 +67,7 @@ window.Conn = (function () {
       this.ws = ws;
 
       ws.onopen = () => {
+        this._everOpened = true;
         this.log('Socket open — authenticating app…', 'info');
         this.send({ clientMsgId: this.nextId(), payloadType: P.APPLICATION_AUTH_REQ, payload: { clientId: creds.clientId, clientSecret: creds.clientSecret } });
         this.phase = 'app_auth';
@@ -76,7 +79,7 @@ window.Conn = (function () {
         else if (e.data instanceof Blob) e.data.text().then((t) => this.handleRaw(t)).catch(() => {});
       };
 
-      ws.onerror = () => { this.log('WebSocket transport error.', 'err'); };
+      ws.onerror = () => { this.log('WebSocket transport error (cannot reach ' + this.host() + ':5036).', 'err'); };
 
       ws.onclose = (ev) => {
         const wasConnected = this.state === 'connected';
@@ -88,6 +91,11 @@ window.Conn = (function () {
           this.status('Disconnected', 'off');
           this.log('Disconnected (manual).', 'warn');
           if (this.onDisconnected) this.onDisconnected('manual');
+          return;
+        }
+        if (!this._everOpened) {
+          this.log('Could not open the connection — check your network / firewall, then press Connect.', 'err');
+          this.status('Connection failed', 'off');
           return;
         }
         this.log('Connection closed (' + ev.code + '). Reconnecting…', 'warn');
@@ -148,8 +156,10 @@ window.Conn = (function () {
           } else if (creds.accessToken) {
             this.requestAccounts();
           } else {
+            this.state = 'idle';
+            this.teardownTimers();
             this.status('Token required', 'off');
-            this.log('Authorize via OAuth to get an access token.', 'warn');
+            this.log('No access token — click "Authorize with cTrader" first.', 'warn');
           }
           break;
         }
@@ -200,6 +210,7 @@ window.Conn = (function () {
     authFailed(payload) {
       this.log('Authentication failed [' + payload.errorCode + ']: ' + (payload.description || ''), 'err');
       this.status('Auth failed', 'off');
+      this.teardownTimers();
       if (payload.errorCode === 'AUTHENTICATION_FAILED') {
         this.log('Check your client ID / secret, then reconnect.', 'warn');
         this.intentional = true; // don't hot-loop on bad credentials
@@ -261,16 +272,23 @@ window.Conn = (function () {
 
     // ---------------- reconnect ----------------
     scheduleReconnect() {
-      if (this.intentional || this.reconnectScheduled) return;
+      if (this.intentional || this.reconnectScheduled || this.giveUp) return;
       this.reconnectScheduled = true;
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts > 8) {
+        this.giveUp = true;
+        this.state = 'idle';
+        this.status('Connection failed', 'off');
+        this.log('Gave up after 8 reconnect attempts. Check your network, then press Connect.', 'err');
+        return;
+      }
       const base = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
       const jitter = Math.floor(Math.random() * 2000);
       const delay = base + jitter;
-      this.reconnectAttempts++;
       this.log('Retrying in ' + Math.round(delay / 1000) + 's (attempt ' + this.reconnectAttempts + ').', 'warn');
       this.reconnectTimer = setTimeout(() => {
         this.reconnectScheduled = false;
-        if (this.intentional) return;
+        if (this.intentional || this.giveUp) return;
         this.connect();
       }, delay);
     },

@@ -11,7 +11,7 @@
     clientId: '', clientSecret: '',
     env: localStorage.getItem('ctrader_env') || 'demo',
     accountId: localStorage.getItem('ctrader_account') || '',
-    redirectUri: localStorage.getItem('ctrader_redirect') || '',
+    redirectUri: localStorage.getItem('ctrader_redirect') || 'https://ctraderbot.vercel.app',
     accessToken: localStorage.getItem('ctrader_access') || '',
     refreshToken: localStorage.getItem('ctrader_refresh') || '',
 
@@ -138,6 +138,13 @@
     onAccounts: (accounts) => {
       window._accounts = accounts;
       const sel = $('accSelect');
+      if (!accounts.length) {
+        if (sel) sel.innerHTML = '<option value="">No accounts</option>';
+        log('No accounts returned for this token — the OAuth scope must include "trading", or the token belongs to a different app.', 'err');
+        toast('No accounts for this token', 'err');
+        Conn.disconnect();
+        return;
+      }
       if (!sel) return;
       sel.innerHTML = '';
       accounts.forEach((a) => {
@@ -1156,10 +1163,16 @@
 
   function startOAuth() {
     const ri = S.redirectUri || window.location.origin;
+    if (/localhost|127\.0\.0\.1|file:/.test(window.location.origin)) {
+      log('You are on localhost — cTrader OAuth must redirect to the deployed URL (registered redirect URI), not localhost.', 'warn');
+      toast('OAuth only works on the deployed URL', 'warn');
+      return;
+    }
     const url = 'https://openapi.ctrader.com/apps/auth?client_id=' + encodeURIComponent(S.clientId) +
       '&redirect_uri=' + encodeURIComponent(ri) + '&scope=trading';
-    window.open(url, 'ctrader_oauth', 'width=560,height=700,popup=yes');
-    log('OAuth window opened. Approve to continue.', 'info');
+    log('Opening OAuth with redirect_uri=' + ri, 'info');
+    const popup = window.open(url, 'ctrader_oauth', 'width=560,height=700,popup=yes');
+    if (!popup) log('Popup was blocked — allow popups for this site.', 'warn');
   }
 
   function receiveOAuthCode(code) {
@@ -1176,13 +1189,30 @@
     receiveOAuthCode(code);
   }
 
-  function exchange(body) {
-    fetch('/api/token', {
+  function postToken(body) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);
+    return fetch('/api/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body,
-    }).then((r) => r.json()).then((d) => {
-      if (d.errorCode || d.error) { log('OAuth error: ' + (d.description || d.error || d.errorCode), 'err'); toast('OAuth failed', 'err'); return; }
+      signal: ctrl.signal,
+    }).then((r) => r.text()).then((txt) => {
+      clearTimeout(timer);
+      try { return JSON.parse(txt); } catch (e) { return { raw: txt }; }
+    }).catch((e) => {
+      clearTimeout(timer);
+      throw new Error(e.name === 'AbortError' ? 'timed out after 25s' : e.message);
+    });
+  }
+
+  function oauthError(d) {
+    return d && (d.error_description || d.error || d.description || d.errorCode || d.raw);
+  }
+
+  function exchange(body) {
+    log('Exchanging code for access token…', 'info');
+    postToken(body).then((d) => {
       if (d.accessToken) {
         S.accessToken = d.accessToken;
         if (d.refreshToken) S.refreshToken = d.refreshToken;
@@ -1192,26 +1222,27 @@
         toast('Authorized', 'ok');
         Conn.connect();
       } else {
-        log('Unexpected token response: ' + JSON.stringify(d), 'warn');
+        log('OAuth failed: ' + oauthError(d), 'err');
+        toast('OAuth failed — see Journal', 'err');
       }
-    }).catch((e) => { log('Token exchange failed: ' + e.message, 'err'); toast('Network error during OAuth', 'err'); });
+    }).catch((e) => {
+      log('Token exchange error: ' + e.message, 'err');
+      toast('Token exchange failed — see Journal', 'err');
+    });
   }
 
   function refreshAccessToken() {
     if (!S.refreshToken) { toast('No refresh token — re-authorize', 'err'); return Promise.reject(new Error('no refresh token')); }
-    return fetch('/api/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: S.refreshToken, redirect_uri: S.redirectUri || window.location.origin }),
-    }).then((r) => r.json()).then((d) => {
-      if (!d.accessToken) throw new Error(d.description || 'refresh failed');
-      S.accessToken = d.accessToken;
-      if (d.refreshToken) S.refreshToken = d.refreshToken;
-      savePrefs();
-      $('tokInput').value = d.accessToken;
-      log('Access token refreshed.', 'ok');
-      return d.accessToken;
-    });
+    return postToken(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: S.refreshToken, redirect_uri: S.redirectUri || window.location.origin }))
+      .then((d) => {
+        if (!d.accessToken) throw new Error(oauthError(d) || 'refresh failed');
+        S.accessToken = d.accessToken;
+        if (d.refreshToken) S.refreshToken = d.refreshToken;
+        savePrefs();
+        $('tokInput').value = d.accessToken;
+        log('Access token refreshed.', 'ok');
+        return d.accessToken;
+      });
   }
 
   function manualConnect() {
@@ -1333,14 +1364,19 @@
 
   // boot
   function boot() {
+    const isLocal = /localhost|127\.0\.0\.1|file:/.test(window.location.origin);
+    if (isLocal) {
+      log('Running on localhost — /api/* endpoints do not exist here, so OAuth and app auth will fail. Deploy to Vercel.', 'warn');
+    }
     // config endpoint may fail on file:// or offline — fall back silently
     fetch('/api/config').then((r) => r.json()).then((d) => {
       S.clientId = d.clientId || '';
       S.clientSecret = d.clientSecret || '';
       init();
+      log(S.clientId ? 'Client credentials loaded (' + S.clientId.slice(0, 10) + '…).' : 'Client credentials empty — OAuth / app auth will fail.', S.clientId ? 'ok' : 'err');
     }).catch(() => {
       init();
-      log('Could not load app credentials (/api/config). OAuth will not work.', 'err');
+      log('Could not load /api/config (HTTP error). OAuth and app auth will fail.', 'err');
     });
   }
 
