@@ -204,6 +204,9 @@
       case P.TRADER_UPDATE_EVENT: handleTrader(payload); break;
       case P.MARGIN_CHANGED_EVENT: handleMargin(payload); break;
       case P.ORDER_LIST_RES: handleOrders(payload); break;
+      case P.RECONCILE_RES: handleReconcile(payload); break;
+      case P.SYMBOL_BY_ID_RES: handleSymbolById(payload); break;
+      case P.GET_SYMBOL_RES: handleSymbolById(payload); break;
       case P.EXECUTION_EVENT: handleExecution(payload); break;
       case P.GET_TRENDBARS_RES: handleTrendbars(payload); break;
       case P.SUBSCRIBE_SPOTS_RES: break;
@@ -220,7 +223,9 @@
     list.forEach(normalizeSymbol);
     log('Loaded ' + list.length + ' symbols across ' + S.catOrder.filter((k) => S.byCat[k].length).length + ' asset classes.', 'ok');
     populateSymbolSelects();
-    subscribeSpots(buildWatchList());
+    const wl = buildWatchList();
+    requestFullSymbols(wl);
+    subscribeSpots(wl);
     renderWatchlist();
     if (!S.currentSymbol) {
       const first = S.byCat.Crypto[0] || S.byCat.Forex[0] || S.byCat.Metals[0] || S.byCat.Indices[0] || S.byCat.Stocks[0];
@@ -244,10 +249,47 @@
       quoteAsset: s.quoteAsset || '',
       description: s.description || '',
       category: window.categorizeSymbol(name, s.baseAsset, s.quoteAsset, s.description),
+      isFull: false
     };
     S.symbols.set(id, det);
     S.byName.set(name, det);
     S.byCat[det.category].push(det);
+  }
+
+  function requestFullSymbols(ids) {
+    if (!ids.length || !Conn.connected) return;
+    const acc = parseInt(S.accountId, 10);
+    Conn.send({
+      clientMsgId: Conn.nextId(),
+      payloadType: P.SYMBOL_BY_ID_REQ,
+      payload: { ctidTraderAccountId: acc, symbolId: ids }
+    });
+  }
+
+  function handleSymbolById(payload) {
+    const list = payload.symbol || [];
+    list.forEach((s) => {
+      const id = s.symbolId;
+      const existing = S.symbols.get(id);
+      if (existing) {
+        existing.digits = s.digits != null ? s.digits : existing.digits;
+        existing.pipPosition = s.pipPosition != null ? s.pipPosition : existing.pipPosition;
+        existing.lotSize = s.lotSize != null ? s.lotSize : existing.lotSize;
+        existing.minVolume = s.minVolume != null ? s.minVolume : existing.minVolume;
+        existing.maxVolume = s.maxVolume != null ? s.maxVolume : existing.maxVolume;
+        existing.volumeStep = s.stepVolume != null ? s.stepVolume : (s.volumeStep != null ? s.volumeStep : existing.volumeStep);
+        existing.isFull = true;
+      }
+    });
+    log('Updated full details for ' + list.length + ' symbols.', 'ok');
+    populateSymbolSelects();
+    renderWatchlist();
+    if (S.currentSymbol) {
+      const curDet = S.byName.get(S.currentSymbol);
+      if (curDet) {
+        renderChartHeader(curDet, S.spots.get(S.currentSymbol)?.bid, S.spots.get(S.currentSymbol)?.ask);
+      }
+    }
   }
 
   function buildWatchList() {
@@ -383,6 +425,60 @@
         });
       }
     });
+    renderPositions();
+    renderPending();
+  }
+
+  function handleReconcile(payload) {
+    const ps = payload.position || [];
+    const os = payload.order || [];
+    S.positions = [];
+    S.pending = [];
+
+    ps.forEach((p) => {
+      const det = S.symbols.get(p.tradeData.symbolId);
+      const name = det ? det.symbolName : ('#' + p.tradeData.symbolId);
+      const md = p.moneyDigits != null ? p.moneyDigits : (S.trader.moneyDigits || 2);
+      const d = Math.pow(10, md);
+      const side = (p.tradeData.tradeSide === 'BUY' || p.tradeData.tradeSide === 1) ? 'buy' : 'sell';
+      const vol = p.tradeData.volume / (det ? det.lotSize : 100000);
+      const priceDiv = det ? Math.pow(10, det.digits) : 1;
+
+      const pos = {
+        id: p.positionId,
+        symbol: name,
+        side,
+        volume: vol,
+        units: p.tradeData.volume,
+        entry: p.price || 0,
+        sl: p.stopLoss || null,
+        tp: p.takeProfit || null,
+        profit: p.grossUnrealizedPnL != null ? p.grossUnrealizedPnL / d : (p.netUnrealizedPnL != null ? p.netUnrealizedPnL / d : 0),
+        swap: p.swap != null ? p.swap / d : 0,
+        commission: p.commission != null ? p.commission / d : 0,
+        currency: S.trader.currency,
+      };
+      S.positions.push(pos);
+    });
+
+    os.forEach((o) => {
+      const det = S.symbols.get(o.tradeData.symbolId);
+      const name = det ? det.symbolName : ('#' + o.tradeData.symbolId);
+      const side = (o.tradeData.tradeSide === 'BUY' || o.tradeData.tradeSide === 1) ? 'buy' : 'sell';
+      const priceDiv = det ? Math.pow(10, det.digits) : 1;
+
+      S.pending.push({
+        id: o.orderId,
+        symbol: name,
+        type: o.orderType,
+        side,
+        volume: (o.tradeData.volume || 0) / (det ? det.lotSize : 100000),
+        price: o.stopPrice != null ? o.stopPrice : (o.limitPrice != null ? o.limitPrice : 0),
+        sl: o.stopLoss || null,
+        tp: o.takeProfit || null,
+      });
+    });
+
     renderPositions();
     renderPending();
   }
@@ -549,7 +645,7 @@
   function getOrders() {
     const acc = parseInt(S.accountId, 10);
     if (!acc) return;
-    Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.ORDER_LIST_REQ, payload: { ctidTraderAccountId: acc } });
+    Conn.send({ clientMsgId: Conn.nextId(), payloadType: P.RECONCILE_REQ, payload: { ctidTraderAccountId: acc, returnProtectionOrders: true } });
   }
 
   // ============================================================
@@ -763,6 +859,13 @@
     updateChartData();
     loadHistory(name, S.currentTF);
     updateTicket();
+
+    // Request full details for the selected symbol if not already loaded as full
+    const det = S.byName.get(name);
+    if (det && !det.isFull) {
+      requestFullSymbols([det.symbolId]);
+    }
+
     if (window.matchMedia('(max-width:860px)').matches) {
       const wl = $('watchPanel'); if (wl) wl.style.display = 'none';
       document.querySelector('.main').scrollIntoView({ behavior: 'smooth' });
