@@ -1,0 +1,7 @@
+127.0.0.1 - - [03/Aug/2026 20:26:32] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [03/Aug/2026 20:26:32] "GET /css/app.css?v=9 HTTP/1.1" 200 -
+127.0.0.1 - - [03/Aug/2026 20:26:32] "GET /js/conn.js?v=9 HTTP/1.1" 200 -
+127.0.0.1 - - [03/Aug/2026 20:26:32] "GET /js/app.js?v=9 HTTP/1.1" 200 -
+127.0.0.1 - - [03/Aug/2026 20:26:32] "GET /js/proto.js?v=9 HTTP/1.1" 200 -
+127.0.0.1 - - [03/Aug/2026 20:26:33] code 404, message File not found
+127.0.0.1 - - [03/Aug/2026 20:26:33] "GET /api/config HTTP/1.1" 404 -
